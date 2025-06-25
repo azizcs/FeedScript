@@ -1,0 +1,128 @@
+Step 1: Set Up a New Workflow
+Log in to Dynatrace
+
+Navigate to your Dynatrace environment (e.g., https://[your-tenant].live.dynatrace.com).
+
+Go to Automation
+
+Click on "Automation" in the left-hand menu.
+
+Create a New Workflow
+
+Click "Create workflow" → "Blank workflow".
+
+Give it a name (e.g., "Disk Capacity Prediction").
+
+Step 2: Add Required Tasks
+The workflow will consist of two main tasks:
+
+Query Disks (to get a list of disks to analyze)
+
+Run Forecast & Predict Full Capacity (using the provided JS code)
+
+Task 1: Query Disks (DQL Query)
+Add a new task
+
+Click "Add task" → "Run DQL query".
+
+Name it "query_entities_disk".
+
+Configure the DQL Query
+
+Use this query to fetch disk entities:
+
+sql
+FETCH dt.entity.disk
+| FIELDS id, entity.name
+| LIMIT 1000
+(Adjust LIMIT if needed.)
+
+Save the output
+
+Ensure the "Store result as" field is set to "query_entities_disk" (matches the JS code).
+
+Task 2: Run Forecast & Predict Full Capacity (JavaScript)
+Add a new task
+
+Click "Add task" → "Run JavaScript".
+
+Name it "predict_disk_full_capacity".
+
+Paste the Provided JavaScript Code
+
+Copy the updated JS code (from my previous response) and paste it into the editor.
+
+Configure Input/Output
+
+Ensure the execution_id parameter is passed (Dynatrace handles this automatically).
+
+The script will return violations (disks predicted to reach 100%).
+
+Save the task.
+
+Step 3: Connect the Tasks
+Link Task 1 → Task 2
+
+Drag a connection from "query_entities_disk" to "predict_disk_full_capacity".
+
+This ensures the disk list is passed to the forecast script.
+
+(Optional) Add a Notification Task
+
+If you want alerts, add a "Send notification" task after the JS task.
+
+Configure it to send Slack/email alerts when violations are found.
+
+Step 4: Test the Workflow
+Run the Workflow Manually
+
+Click "Run workflow" → "Run now".
+
+Monitor execution in the "Executions" tab.
+
+Check the Output
+
+The JS task will return an array of disks with:
+
+diskName
+
+currentUsage (%)
+
+daysUntilFull
+
+predictedDate (when 100% is reached).
+
+Verify in Dynatrace
+
+Cross-check with "Hosts & disks" in the Dynatrace UI to confirm predictions.
+
+Step 5: Schedule or Trigger Automatically
+Set Up a Schedule (Optional)
+
+Edit workflow → "Trigger" → "Schedule".
+
+Set it to run daily/weekly.
+
+Or Trigger Based on Events
+
+Example: Run when disk usage exceeds 85% (using a problem alert).
+
+Troubleshooting
+✅ If the workflow fails:
+
+Check execution logs for errors.
+
+Ensure the DQL query returns disk IDs correctly.
+
+Verify the JS task has the correct permissions (may need Davis AI access).
+
+✅ If no violations are found:
+
+Try increasing the forecastHorizon (e.g., to 365 days).
+
+Manually check if some disks are already near 100%.
+
+Final Workflow Structure
+text
+Start → [Query Disks (DQL)] → [Predict Full Capacity (JS)] → (Optional: Notify)
+Now you have an automated workflow that predicts when disks will run out of space! 🚀 Let me know if you need adjustments.
