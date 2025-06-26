@@ -199,3 +199,47 @@ function calculateDaysToFullCapacity(result) {
         }
     });
 }
+
+
+function calculateDaysToFullCapacity_1(result) {
+    if (result?.executionStatus !== 'COMPLETED') return;
+
+    result.output?.forEach(prediction => {
+        if (prediction.analysisStatus === 'OK' && prediction.forecastQualityAssessment === 'VALID') {
+            // Historical data (current usage)
+            const historicalRecord = prediction.analyzedTimeSeriesQuery?.records?.[0];
+            // Forecast data (future prediction)
+            const forecastRecord = prediction.timeSeriesDataWithPredictions?.records?.[0];
+
+            if (!historicalRecord || !forecastRecord) {
+                console.warn('Missing historical or forecast records');
+                return;
+            }
+
+            // 1. Get CURRENT usage from historical data
+            const usageData = historicalRecord['max(dt.host.disk.used.percent)'];
+            const currentUsage = Array.isArray(usageData) ? usageData.slice(-1)[0] : null;
+
+            // 2. Get LOWER forecast values
+            const lowerForecast = forecastRecord['dt.davis.forecast.lower'] || [];
+
+            // 3. Find first day where lower forecast hits 100%
+            const daysToFull = lowerForecast.findIndex(val => val >= 100);
+
+            if (daysToFull >= 0 && currentUsage < 100) {
+                predictionSummary.violations.push({
+                    diskId: forecastRecord['dt.entity.disk'],
+                    diskName: forecastRecord['disk.name'],
+                    hostName: forecastRecord['host.name'],
+                    currentUsage, // From historical data
+                    daysUntilFull: daysToFull + 1,
+                    predictedDate: new Date(Date.now() + (daysToFull + 1) * 86400000).toISOString(),
+                    dataSource: {
+                        historical: historicalRecord.timeframe,
+                        forecast: forecastRecord.timeframe
+                    }
+                });
+            }
+        }
+    });
+}
