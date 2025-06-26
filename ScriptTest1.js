@@ -243,3 +243,74 @@ function calculateDaysToFullCapacity_1(result) {
         }
     });
 }
+
+
+function calculateDaysToFullCapacity(result) {
+    console.log('[DEBUG] Starting calculateDaysToFullCapacity');
+
+    if (result?.executionStatus !== 'COMPLETED') {
+        console.warn('[WARNING] Analysis not completed. Execution status:', result?.executionStatus);
+        return;
+    }
+
+    console.log(`[INFO] Processing ${result.output?.length || 0} predictions`);
+
+    result.output?.forEach((prediction, index) => {
+        console.log(`\n[PREDICTION ${index + 1}] Processing prediction ${prediction.analyzerExecutionId}`);
+        console.log(`- Analysis Status: ${prediction.analysisStatus}`);
+        console.log(`- Forecast Quality: ${prediction.forecastQualityAssessment}`);
+
+        if (prediction.analysisStatus !== 'OK' || prediction.forecastQualityAssessment !== 'VALID') {
+            console.warn(`[SKIPPED] Prediction ${index} has invalid status/quality`);
+            return;
+        }
+
+        // Historical data (current usage)
+        const historicalRecord = prediction.analyzedTimeSeriesQuery?.records?.[0];
+        console.log('[HISTORICAL] Record keys:', historicalRecord ? Object.keys(historicalRecord) : 'MISSING');
+
+        // Forecast data (future prediction)
+        const forecastRecord = prediction.timeSeriesDataWithPredictions?.records?.[0];
+        console.log('[FORECAST] Record keys:', forecastRecord ? Object.keys(forecastRecord) : 'MISSING');
+
+        if (!historicalRecord || !forecastRecord) {
+            console.error('[ERROR] Missing historical or forecast records');
+            return;
+        }
+
+        // 1. Get CURRENT usage from historical data
+        const usageData = historicalRecord['max(dt.host.disk.used.percent)'];
+        console.log('[HISTORICAL] Usage data samples (first/last):',
+                   usageData?.slice(0, 3), '...',
+                   usageData?.slice(-3));
+
+        const currentUsage = Array.isArray(usageData) ? usageData.slice(-1)[0] : null;
+        console.log(`[CURRENT] Disk usage: ${currentUsage}%`);
+
+        // 2. Get LOWER forecast values
+        const lowerForecast = forecastRecord['dt.davis.forecast.lower'] || [];
+        console.log('[FORECAST] Lower forecast samples (first/last):',
+                   lowerForecast?.slice(0, 3), '...',
+                   lowerForecast?.slice(-3));
+
+        // 3. Find first day where lower forecast hits 100%
+        const daysToFull = lowerForecast.findIndex(val => val >= 100);
+        console.log(`[PREDICTION] Days until 100%: ${daysToFull >= 0 ? daysToFull + 1 : 'Never'}`);
+
+        if (daysToFull >= 0 && currentUsage < 100) {
+            console.log(`[ALERT] Disk will reach capacity in ${daysToFull + 1} days!`);
+            predictionSummary.violations.push({
+                diskId: forecastRecord['dt.entity.disk'],
+                diskName: forecastRecord['disk.name'],
+                hostName: forecastRecord['host.name'],
+                currentUsage,
+                daysUntilFull: daysToFull + 1,
+                predictedDate: new Date(Date.now() + (daysToFull + 1) * 86400000).toISOString()
+            });
+        } else {
+            console.log('[OK] Disk capacity safe');
+        }
+    });
+
+    console.log('\n[SUMMARY] Final violations:', predictionSummary.violations.length);
+}
