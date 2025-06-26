@@ -138,3 +138,64 @@ export default async function ({ execution_id }) {
         return response.result;
     }
 }
+
+
+function calculateDaysToFullCapacity(result) {
+    console.log('[DEBUG] Raw analyzer result:', JSON.stringify(result, null, 2));
+
+    if (result?.executionStatus !== 'COMPLETED') {
+        console.warn('[WARNING] Analysis not completed');
+        return;
+    }
+
+    result.output?.forEach((prediction, index) => {
+        console.log(`[DEBUG] Processing prediction ${index + 1}/${result.output.length}`);
+
+        try {
+            if (prediction.analysisStatus !== 'OK' || prediction.forecastQualityAssessment !== 'VALID') {
+                console.debug(`[SKIPPED] Prediction ${index} - Status: ${prediction.analysisStatus}, Quality: ${prediction.forecastQualityAssessment}`);
+                return;
+            }
+
+            const records = prediction.timeSeriesDataWithPredictions?.records;
+            if (!records || records.length === 0) {
+                console.warn(`[WARNING] No records found for prediction ${index}`);
+                return;
+            }
+
+            // Extract the first (and only) record
+            const record = records[0];
+            console.log('[DEBUG] Record structure:', Object.keys(record));
+
+            // Safely get usage data
+            const usageKey = 'max(dt.host,disk.used.percent)';
+            const usageData = record[usageKey];
+
+            if (!Array.isArray(usageData)) {
+                console.warn(`[WARNING] Invalid usage data format for prediction ${index}`);
+                return;
+            }
+
+            const currentUsage = usageData[usageData.length - 1]; // Last actual value
+            const forecastValues = record['dt.davis.forecast'] || [];
+            const daysToFull = forecastValues.findIndex(val => val >= 100);
+
+            if (daysToFull >= 0 && currentUsage < 100) {
+                console.log(`[ALERT] Disk will fill in ${daysToFull + 1} days (Current: ${currentUsage}%)`);
+                predictionSummary.violations.push({
+                    diskId: record['dt.entity.disk'],
+                    diskName: record['disk.name'],
+                    hostName: record['host.name'],
+                    currentUsage: currentUsage,
+                    daysUntilFull: daysToFull + 1,
+                    predictedDate: new Date(Date.now() + (daysToFull + 1) * 86400000).toISOString(),
+                    timeframe: record.timeframe
+                });
+            } else {
+                console.debug(`[OK] Disk usage safe (Current: ${currentUsage}%, Days to fill: ${daysToFull >= 0 ? daysToFull + 1 : 'N/A'})`);
+            }
+        } catch (error) {
+            console.error(`[ERROR] Processing prediction ${index}:`, error);
+        }
+    });
+}
