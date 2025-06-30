@@ -85,3 +85,109 @@ export default async function ({ execution_id }) {
         return analyzerData;
     }
 }
+
+
+Change Request: Decommission "Maintenance Mode" Application
+
+Purpose:
+As part of the WMC1 to WMC2 migration, we are decommissioning the legacy "Maintenance Mode" application. This change involves:
+
+Adding a notification banner to inform users
+
+Subsequent removal of the application after 30+ days
+
+Replacement with an offline redirect page
+
+Key Details:
+
+No outage required (zero impact during implementation)
+
+No application availability impact during the change window
+
+Implementation Plan:
+
+Phase 1: Notification Deployment (Day 0)
+
+Add a red notification banner to the application homepage:
+"This application will be decommissioned on [date]. Please transition to [Page=Duty] for maintenance requests."
+
+Update all environments: PAT, PRD, and DR servers
+
+Phase 2: Application Removal (Day 30+)
+
+Remove the application files from all servers
+
+Deploy a static offline page:
+"This application has been decommissioned. Please visit [Page=Duty] for maintenance requests."
+
+Team Responsibilities:
+
+Implementer: [Your Name] ([Your Email])
+
+BA: [BA Name] ([Phone] | [Email])
+
+BA Manager: [Manager Name] ([Phone] | [Email])
+
+AVP: [AVP Name] ([Phone] | [Email])
+
+Verifier: [Verifier Name] ([Phone])
+
+VMC1 HA Advisory Section:
+
+Is this change on any clusters in VMC1?
+No (application is being decommissioned entirely).
+
+Stakeholder Communication:
+
+Users are being informed via:
+
+Homepage notification banner
+
+Email announcement to affected teams
+
+No negative feedback received
+
+Risk Assessment:
+
+Worst-case scenario: Users miss notification (mitigated by 30-day notice period)
+
+Outage impact: None
+
+Traffic redirection: Automatic via offline page
+
+Deployment Pattern:
+Following standard decommissioning procedure (similar to CHG[reference #] executed on [date]).
+
+Implementation Timeline:
+
+Notification Phase (Day 0):
+
+09:00: Deploy homepage notification via config update
+
+10:00: Verify visibility across all environments
+
+Decommission Phase (Day 30+):
+
+09:00: Backup all application files and configurations
+
+10:00: Remove application binaries
+
+11:00: Deploy offline page
+
+12:00: Verify complete removal
+
+Backout Plan:
+
+Notification Phase: Revert config files from backup
+
+Decommission Phase: Restore application from backups
+
+Last tested during [similar change #] on [date] in PAT environment
+
+Verification:
+
+[Team Member] will confirm:
+
+Notification visibility (Phase 1)
+
+Application removal and offline page functionality (Phase 2)
