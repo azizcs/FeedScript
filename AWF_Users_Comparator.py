@@ -28,17 +28,18 @@ def parse_excel(excel_file):
     """Parse Excel file and extract all user IDs with ACF2ID/NOVELLID mapping."""
     try:
         # Read ACF2ID to NOVELLID mapping sheet
-        id_map_df = pd.read_excel(excel_file, sheet_name='AWF_ACF2IDNOVELL', header=5)
+        id_map_df = pd.read_excel(excel_file, sheet_name='AWF_ACF2IDNOVELL', header=5, usecols="C:D")
         id_map = {}
         if not id_map_df.empty:
-            id_map = dict(zip(id_map_df['ACF2ID'].dropna(), id_map_df['NOVELLID'].dropna()))
+            # Clean data - remove any rows with empty values
+            id_map_df = id_map_df.dropna()
+            id_map = dict(zip(id_map_df['ACF2ID'].astype(str).str.strip(),
+                              id_map_df['NOVELLID'].astype(str).str.strip()))
         reverse_id_map = {v: k for k, v in id_map.items()}
 
-        # Sheets to process (excluding AWF_ACF2IDNOVELL which we already processed)
+        # Sheets to process (including AWFEMPLOYEE which appears to be the main sheet now)
         sheets_to_check = [
-            'Scheduling', 'OnRequest',
-            'ASPNET_Users', 'AWF_USERACCESSPROFILE',
-            'AWF_USERS'
+            'AWFEMPLOYEE', 'AWF_USERS', 'AWF_USERACCESSPROFILE'
         ]
 
         excel_users = set()
@@ -63,7 +64,7 @@ def parse_excel(excel_file):
                     print(f"Warning: Could not find User_ID column in {sheet} sheet")
                     continue
 
-                # Add all User_IDs from this sheet (excluding empty/NULL values)
+                # Clean and add all User_IDs from this sheet
                 valid_users = df[user_col].dropna().astype(str).str.strip()
                 excel_users.update(valid_users[valid_users != ''])
 
@@ -91,45 +92,45 @@ def compare_users(xml_users, excel_data):
     id_map = excel_data['id_map']
     reverse_id_map = excel_data['reverse_id_map']
 
-    # Function to check if a user exists in XML (considering ID mappings)
-    def user_in_xml(user_id):
-        # Check direct match
-        if user_id in xml_users:
-            return True
-        # Check if this is an ACF2ID that maps to a NOVELLID in XML
-        if user_id in id_map and id_map[user_id] in xml_users:
-            return True
-        # Check if this is a NOVELLID that maps to an ACF2ID in XML
-        if user_id in reverse_id_map and reverse_id_map[user_id] in xml_users:
-            return True
-        return False
+    # Find all possible Excel user IDs (including mapped ones)
+    all_excel_ids = set(excel_users)
+    for excel_user in excel_users:
+        if excel_user in id_map:
+            all_excel_ids.add(id_map[excel_user])
+        if excel_user in reverse_id_map:
+            all_excel_ids.add(reverse_id_map[excel_user])
 
     # Find users only in XML (considering ID mappings)
     only_in_xml = set()
     for xml_user in xml_users:
-        # Check if this XML user has a corresponding Excel user (direct or mapped)
-        found = False
-        if xml_user in excel_users:
-            found = True
-        elif xml_user in reverse_id_map and reverse_id_map[xml_user] in excel_users:
-            found = True
-        elif xml_user in id_map and id_map[xml_user] in excel_users:
-            found = True
-
-        if not found:
+        # Check if this XML user exists in Excel (direct or mapped)
+        if (xml_user not in excel_users and
+                xml_user not in reverse_id_map and
+                xml_user not in id_map.values()):
             only_in_xml.add(xml_user)
 
     # Find users only in Excel (not in XML, considering ID mappings)
     only_in_excel = set()
     for excel_user in excel_users:
-        if not user_in_xml(excel_user):
+        # Check if this Excel user exists in XML (direct or mapped)
+        if (excel_user not in xml_users and
+                excel_user not in id_map and
+                excel_user not in reverse_id_map.values()):
             only_in_excel.add(excel_user)
+
+    # Find mapped users (ACF2ID <-> NOVELLID relationships)
+    mapped_users = []
+    for acf2id, novellid in id_map.items():
+        if acf2id in excel_users and novellid in xml_users:
+            mapped_users.append(f"{acf2id} (Excel) ↔ {novellid} (XML)")
 
     return {
         'only_in_xml': sorted(only_in_xml),
         'only_in_excel': sorted(only_in_excel),
+        'mapped_users': mapped_users,
         'total_xml_users': len(xml_users),
-        'total_excel_users': len(excel_users)
+        'total_excel_users': len(excel_users),
+        'total_mapped_pairs': len(mapped_users)
     }
 
 
@@ -143,6 +144,7 @@ def export_results(results, output_file):
                     'Comparison Date',
                     'Total XML Users',
                     'Total Excel Users',
+                    'Mapped User Pairs (ACF2ID ↔ NOVELLID)',
                     'Users only in XML',
                     'Users only in Excel'
                 ],
@@ -150,6 +152,7 @@ def export_results(results, output_file):
                     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     results['total_xml_users'],
                     results['total_excel_users'],
+                    results['total_mapped_pairs'],
                     len(results['only_in_xml']),
                     len(results['only_in_excel'])
                 ]
@@ -171,6 +174,14 @@ def export_results(results, output_file):
             else:
                 pd.DataFrame({'Message': ['No users only in Excel']}).to_excel(
                     writer, sheet_name='Excel Only Users', index=False)
+
+            # Mapped users
+            if results['mapped_users']:
+                pd.DataFrame({'Mapped_User_Pairs': results['mapped_users']}).to_excel(
+                    writer, sheet_name='Mapped Users', index=False)
+            else:
+                pd.DataFrame({'Message': ['No mapped user pairs found']}).to_excel(
+                    writer, sheet_name='Mapped Users', index=False)
 
     except Exception as e:
         sys.exit(f"Error exporting to Excel: {e}")
@@ -199,6 +210,7 @@ def main():
         print("\nComparison Results:")
         print(f"- Total XML users: {results['total_xml_users']}")
         print(f"- Total Excel users: {results['total_excel_users']}")
+        print(f"- Mapped user pairs (ACF2ID ↔ NOVELLID): {results['total_mapped_pairs']}")
         print(f"- Users only in XML: {len(results['only_in_xml'])}")
         print(f"- Users only in Excel: {len(results['only_in_excel'])}")
 
