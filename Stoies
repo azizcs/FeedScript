@@ -1,0 +1,70 @@
+1. Create TLEI Business Events in PAT Dynatrace for LAUPD App
+Story Points: 1 (2 for first-time setup)
+Description:
+As a member of the Availability Enablement Pod, I want to create business events for LAUPD App in PAT Dynatrace, so that we can leverage the LEI framework to measure the application's TLEI metrics in PAT. This includes creating events for each critical endpoint/URL identified by the LAUPD App team.
+
+Acceptance Criteria:
+
+Business events created for all critical endpoints (validated by LAUPD App team).
+
+Events configured in Dynatrace PAT using the LEI framework.
+
+Documentation updated in Confluence with LAUPD-specific event definitions.
+
+Completion within 1 business day (2 days for first-time setup).
+
+2. Analyze Event Data in PAT for LAUPD App
+Story Points: 2 (3 if complex)
+Description:
+As a member of the Availability Enablement Pod, I want to analyze LAUPD App event data in Dynatrace PAT to validate accuracy, remove duplicates, and differentiate between business failures (BFs) and technical failures.
+
+Acceptance Criteria:
+
+Report generated showing:
+
+Duplicate events resolved.
+
+BFs vs. technical failures clearly tagged.
+
+LAUPD App team confirms data accuracy.
+
+Events modified if needed (e.g., filters adjusted).
+
+3. Promote Business Events to PROD for LAUPD App
+Story Points: 1
+Description:
+As a member of the Availability Enablement Pod, I want to promote the validated Dynatrace business events setup from PAT to PROD for LAUPD App.
+
+Acceptance Criteria:
+
+PAT configuration exactly replicated in PROD Dynatrace.
+
+Synthetic transactions tested in PROD.
+
+CHG ticket approved (if required).
+
+4. Analyze Event Data in PROD for LAUPD App
+Story Points: 1
+Description:
+As a member of the Availability Enablement Pod, I want to verify PROD event data for LAUPD App matches PAT behavior and expected volumes.
+
+Acceptance Criteria:
+
+PROD data matches PAT patterns (±5% variance).
+
+LAUPD App team confirms expected volumes.
+
+MAL FLINCODE table updated for LAUPD App.
+
+5. Go-Live TLEI for LAUPD App in PROD
+Story Points: 1
+Description:
+As a member of the Availability Enablement Pod, I want to finalize TLEI onboarding for LAUPD App in PROD.
+
+Acceptance Criteria:
+
+Events actively capturing data in PROD.
+
+Dashboards show LAUPD App metrics.
+
+CHG ticket closed (if used).
