@@ -64,3 +64,15 @@ Is HTML	{{format_disk_email.result.isHtml}}
     // Keep banner visible even if user closes it
     localStorage.setItem('hideDecommissionNotice', 'false');
 </script>
+
+Hi Evelyn,
+
+I wanted to share an update on what I’ve been working on regarding the TivoliEvent app.
+
+I’ve been investigating the timeout error and found that the issue was caused by a script attempting to move a very large volume of data—millions of rows dating back to 2011—to a destination database. The root cause appears to be a non-functional connection string for that destination database.
+
+After reviewing the situation with David and Jagroop, we initially planned to rebuild the app and update the destination connection string. However, this task was later called off, as the TivoliEvent app is going to be decommissioned.
+
+All investigations were carried out in the DEV environment, and no code modifications were made during this process.
+
+I’m now looking into the current “Column out of range SQL” error. My initial assessment suggests it might be due to a mismatch between the column names in the source and destination databases, but I’ll be investigating it further.
