@@ -55,3 +55,12 @@ Is HTML	{{format_disk_email.result.isHtml}}
   }],
   "threshold": 80
 }
+
+<div id="decommission-notice" style="background-color: #ff0000; color: white; padding: 15px; text-align: center; font-weight: bold;">
+    NOTICE: This application will be decommissioned on [DATE]. Please transition to <a href="Page=Duty" style="color: white; text-decoration: underline;">[New System Name]</a> for maintenance requests.
+</div>
+
+<script>
+    // Keep banner visible even if user closes it
+    localStorage.setItem('hideDecommissionNotice', 'false');
+</script>
