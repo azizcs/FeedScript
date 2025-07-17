@@ -314,3 +314,31 @@ function calculateDaysToFullCapacity(result) {
 
     console.log('\n[SUMMARY] Final violations:', predictionSummary.violations.length);
 }
+
+
+
+function calculateDaysToFullCapacity(result) {
+        if (result?.executionStatus !== 'COMPLETED') return;
+
+        result.output.forEach(prediction => {
+            if (prediction.analysisStatus === 'OK' && prediction.forecastQualityAssessment === 'VALID') {
+                const records = prediction.timeSeriesDataWithPredictions.records[0];
+                const forecastValues = records['dt.davis.forecast'];
+                const currentUsage = records['max(dt.host.disk.used.percent)'].slice(-1)[0];
+
+                // Find first day where forecast reaches/exceeds 100%
+                const daysToFull = forecastValues.findIndex(val => val >= 100);
+
+                if (daysToFull >= 0 && currentUsage < 100) {
+                    predictionSummary.violations.push({
+                        diskId: records['dt.entity.disk'],
+                        diskName: records['disk.name'],
+                        hostName: records['host.name'],
+                        currentUsage: currentUsage,
+                        daysUntilFull: daysToFull + 1, // +1 because array is 0-indexed
+                        predictedDate: new Date(Date.now() + (daysToFull + 1) * 86400000).toISOString()
+                    });
+                }
+            }
+        });
+    }

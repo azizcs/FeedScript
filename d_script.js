@@ -1,31 +1,38 @@
-import {analyzersClient} from '@dynatrace-sdk/client-davis-analyzers'; 
-import {execution} from '@dynatrace-sdk/automation-utils'; 
+import {analyzersClient} from '@dynatrace-sdk/client-davis-analyzers';
+import {execution} from '@dynatrace-sdk/automation-utils';
 import { executionsClient } from '@dynatrace-sdk/client-automation';
 
 export default async function ({ execution_id }) {
     //metric query
-    const baseQuery = 'timeseries max(dt.host.disk.used.percent), by: {dt.entity.disk,dt.entity.host,host.name), from:now()-30d, to:now(), interval: 1d, filter: in (dt.entity.disk, array(';
+    const baseQuery = 'timeseries max(dt.host.disk.used.percent), by: {dt.entity.disk,dt.entity.host,host.name}, from:now()-30d, to:now(), interval: 1d, filter: in (dt.entity.disk, array(';
     //get entities to query
-    const entityList = await executionsClient.getTaskExecutionResult({executiond: execution_id, id: "query_entities_disk" });
+    const entityList = await executionsClient.getTaskExecutionResult({executionId: execution_id, id: "query_entities_disk" });
     const predictionSummary = { violations: [] };
     var analyzerResult = '';
     let noElem = 0;
     let queryString = '';
 
+    // Process disk entities from the query result
+    const diskEntities = entityList.records.map(record => ({
+        id: record.disk,
+        hostId: record.id,
+        hostName: record['entity,name'] || record['entity name'] || record['entity-name'] || 'Unknown'
+    }));
+
     //batch entities, construct query and start analysis
-    for (var counter = 0; counter < entityList.records.length; counter++){
+    for (var counter = 0; counter < diskEntities.length; counter++){
         await process(counter);
     }
     return predictionSummary;
 
     async function process(counter){
-        queryString += '"' + entityList.records[counter].id + '"';
+        queryString += '"' + diskEntities[counter].id + '"';
         noElem++;
-        if (noElem == 100 || counter == (entityList.records.length - 1)){
-            queryString += ')) | fieldsAdd disk.name = entityname(dt.entity.disk)';
+        if (noElem == 100 || counter == (diskEntities.length - 1)){
+            queryString += ')) | fieldsAdd disk.name = entityname(dt.entity.disk), host.name = entityname(dt.entity.host)';
             const analyzerName = 'dt.statistics.GenericForecastAnalyzer';
             const response = await analyzersClient.executeAnalyzer({
-                analyzerName, 
+                analyzerName,
                 body: {
                     timeSeriesData: {
                         expression: baseQuery + queryString,
@@ -33,11 +40,11 @@ export default async function ({ execution_id }) {
                     forecastHorizon: 365 // Longer horizon to find when 100% will be reached
                 },
             });
-            
-            analyzerResult = response.result.executionStatus !== "COMPLETED" 
-                ? await poll(response) 
+
+            analyzerResult = response.result.executionStatus !== "COMPLETED"
+                ? await poll(response)
                 : response;
-            
+
             calculateDaysToFullCapacity(analyzerResult.result);
             noElem = 0;
             queryString = '';
@@ -104,6 +111,7 @@ export default async function ({ execution_id }) {
                 predictionSummary.violations.push({
                     diskId: forecastRecord['dt.entity.disk'],
                     diskName: forecastRecord['disk.name'],
+                    hostId: forecastRecord['dt.entity.host'],
                     hostName: forecastRecord['host.name'],
                     currentUsage,
                     daysUntilFull: daysToFull + 1,
@@ -122,7 +130,7 @@ export default async function ({ execution_id }) {
         do {
             const token = response.requestToken;
             analyzerData = await analyzersClient.pollAnalyzerExecution({
-                analyzerName: 'dt.statistics.GenericForecastAnalyzer', 
+                analyzerName: 'dt.statistics.GenericForecastAnalyzer',
                 requestToken: token,
             });
         } while (analyzerData.result.executionStatus !== "COMPLETED");
