@@ -239,3 +239,76 @@ export default async function () {
         body: emailBody
     };
 }
+
+
+import { executionsClient } from '@dynatrace-sdk/client-automation';
+
+export default async function ({ execution_id }) {
+    // 1. Fetch prediction results
+    const predictionResults = await executionsClient.getTaskExecutionResult({
+        executionId: execution_id,
+        id: "predict_dist_full_capacity"
+    });
+
+    if (!predictionResults?.violations?.length) {
+        return { shouldSendEmail: false };
+    }
+
+    // 2. Generate HTML Table with Inline CSS (email-compatible)
+    let htmlBody = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+    </head>
+    <body>
+    <h2>🚨 Disk Capacity Alerts</h2>
+    <p>The following disks will reach capacity soon:</p>
+    <table>
+        <tr>
+            <th>Host Name</th>
+            <th>Disk Name</th>
+            <th>Current Usage</th>
+            <th>Days Until Full</th>
+        </tr>
+    `;
+
+    // 3. Generate Plain Text Version (fallback)
+    let plainText = "Disk Capacity Alerts:\n\n";
+    plainText += "Host Name\tDisk Name\tCurrent Usage\tDays Until Full\n";
+    plainText += "-------------------------------------------------\n";
+
+    predictionResults.violations.forEach(violation => {
+        // Add to HTML
+        htmlBody += `
+        <tr>
+            <td>${violation.hostName}</td>
+            <td>${violation.diskName || violation.diskId}</td>
+            <td>${violation.currentUsage.toFixed(2)}%</td>
+            <td>${violation.daysUntilFull}</td>
+        </tr>
+        `;
+
+        // Add to Plain Text
+        plainText += `${violation.hostName}\t${violation.diskName || violation.diskId}\t${violation.currentUsage.toFixed(2)}%\t${violation.daysUntilFull}\n`;
+    });
+
+    // 4. Close HTML
+    htmlBody += `
+    </table>
+    <p><i>This is an automated message. Please take action to prevent outages.</i></p>
+    </body>
+    </html>
+    `;
+
+    return {
+        shouldSendEmail: true,
+        subject: `⚠️ ${predictionResults.violations.length} disks will reach capacity`,
+        htmlBody: htmlBody,
+        plainTextBody: plainText
+    };
+}
