@@ -182,37 +182,60 @@ export default async function ({ execution_id }) {
 }
 
 
+import { fetch } from '@dynatrace-sdk/client-core';
 
-Step 2: Configure the "Send Email" Task
-Now, in the "Send Email" action, use the output from prepare_email_content:
+export default async function ({ execution_id }) {
+    // 1. Fetch prediction results
+    const predictionResults = await executionsClient.getTaskExecutionResult({
+        executionId: execution_id,
+        id: "predict_dist_full_capacity"
+    });
 
-Email Configuration:
-Field	Value
-Recipients	your-email@your-company.com
-Subject	{{prepare_email_content.subject}}
-Body	{{prepare_email_content.body}} (select HTML format)
-Attachments	Add one with:
-- Filename	{{prepare_email_content.csvFilename}}
-- Content	{{prepare_email_content.csvAttachment}}
-- Content Type	text/csv
-Step 3: Add a Condition to Skip Email if No Violations
-Before the "Send Email" task, add a condition to check:
+    if (!predictionResults?.violations?.length) {
+        return { shouldSendEmail: false };
+    }
 
-plaintext
-Copy
-Download
-{{prepare_email_content.shouldSendEmail}} == true
-This ensures the email only sends when there are violations.
+    // 2. Generate HTML & CSV
+    let emailBody = `<h2>Disk Alert</h2><table><tr><th>Host</th><th>Disk</th><th>Usage</th></tr>`;
+    let csvContent = "Host,Disk,Usage%,Days Until Full\n";
 
-Final Workflow Structure
-predict_dist_full_capacity (Run Script)
+    predictionResults.violations.forEach(violation => {
+        emailBody += `<tr><td>${violation.hostName}</td><td>${violation.diskName}</td><td>${violation.currentUsage}%</td></tr>`;
+        csvContent += `${violation.hostName},${violation.diskName},${violation.currentUsage},${violation.daysUntilFull}\n`;
+    });
 
-prepare_email_content (Run Script)
+    emailBody += `</table>`;
 
-Generates HTML body, CSV, subject
+    // 3. Send via API (if permissions exist)
+    const response = await fetch('/api/v2/notifications/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            subject: "Disk Alert",
+            body: emailBody,
+            recipients: ["abdou1aziz.cisse@td.com"],
+            attachments: [{
+                name: "disk_alert.csv",
+                content: btoa(csvContent),
+                contentType: "text/csv"
+            }]
+        })
+    });
 
-Condition: {{prepare_email_content.shouldSendEmail}} == true
+    return { status: response.ok ? "SUCCESS" : "FAILED" };
+}
 
-send_disk_alert_email (Send Email)
 
-Uses outputs from prepare_email_content
+export default async function () {
+    // ... (same as before until CSV generation)
+
+    // 3. Add CSV as a downloadable link (base64 data URL)
+    const csvDataUrl = `data:text/csv;base64,${btoa(csvContent)}`;
+    emailBody += `<p>Download CSV: <a href="${csvDataUrl}" download="disk_alert.csv">Click Here</a></p>`;
+
+    return {
+        shouldSendEmail: true,
+        subject: "Disk Alert",
+        body: emailBody
+    };
+}
