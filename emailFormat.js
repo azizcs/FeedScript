@@ -312,3 +312,123 @@ export default async function ({ execution_id }) {
         plainTextBody: plainText
     };
 }
+
+
+
+
+
+
+import { executionsClient } from '@dynatrace-sdk/client-automation';
+
+export default async function ({ execution_id }) {
+    // 1. Fetch prediction results
+    const predictionResults = await executionsClient.getTaskExecutionResult({
+        executionId: execution_id,
+        id: "predict_dist_full_capacity"
+    });
+
+    if (!predictionResults?.violations?.length) {
+        return { shouldSendEmail: false };
+    }
+
+    // 2. Generate HTML Content
+    let htmlBody = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <style>
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .critical { color: #d9534f; font-weight: bold; }
+    </style>
+    </head>
+    <body>
+    <h2>Disk Capacity Forecast Report</h2>
+    <table>
+        <tr>
+            <th>Host ID</th>
+            <th>Host Name</th>
+            <th>Disk ID</th>
+            <th>Disk Name</th>
+            <th>Current Usage</th>
+            <th>Days Until Full</th>
+            <th>Predicted Date</th>
+        </tr>
+    `;
+
+    // 3. Generate CSV Content
+    let csvContent = "Host ID,Host Name,Disk ID,Disk Name,Current Usage (%),Days Until Full,Predicted Date\n";
+
+    predictionResults.violations.forEach(violation => {
+        const formattedDate = new Date(violation.predictedDate).toLocaleDateString();
+        const isCritical = violation.currentUsage > 90;
+
+        // Escaped HTML row
+        htmlBody += `
+        <tr>
+            <td>${escapeHtml(violation.hostId)}</td>
+            <td>${escapeHtml(violation.hostName)}</td>
+            <td>${escapeHtml(violation.diskId)}</td>
+            <td>${escapeHtml(violation.diskName || 'N/A')}</td>
+            <td class="${isCritical ? 'critical' : ''}">${escapeHtml(violation.currentUsage.toFixed(2))}%</td>
+            <td>${escapeHtml(violation.daysUntilFull)}</td>
+            <td>${escapeHtml(formattedDate)}</td>
+        </tr>
+        `;
+
+        // CSV row
+        csvContent += `"${violation.hostId}","${violation.hostName}","${violation.diskId}","${violation.diskName || 'N/A'}","${violation.currentUsage.toFixed(2)}","${violation.daysUntilFull}","${formattedDate}"\n`;
+    });
+
+    // 4. Finalize HTML with CSV download link
+    htmlBody += `
+    </table>
+    <p>Download CSV: <a href="data:text/csv;base64,${btoa(unescape(encodeURIComponent(csvContent))}" download="disk_alert.csv">Click Here</a></p>
+    </body>
+    </html>
+    `;
+
+    return {
+        shouldSendEmail: true,
+        subject: `⚠️ ${predictionResults.violations.length} disks reaching capacity`,
+        body: htmlBody,
+        csvBase64: btoa(unescape(encodeURIComponent(csvContent))),
+        csvFilename: `disk_alert_${new Date().toISOString().split('T')[0]}.csv`
+    };
+}
+
+// Helper function to escape HTML special characters
+function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') return unsafe;
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+
+
+return {
+    shouldSendEmail: true,
+    subject: `⚠️ ${predictionResults.violations.length} Disk Alerts`,
+    // Wrap in MIME headers to force HTML interpretation
+    body: [
+        "MIME-Version: 1.0",
+        "Content-Type: text/html; charset=utf-8",
+        "",
+        `<!DOCTYPE html>`,
+        `<html>`,
+        `<head><style>`,
+        `  table { border-collapse: collapse; width: 100%; }`,
+        `  th, td { padding: 8px; text-align: left; border: 1px solid #ddd; }`,
+        `  th { background-color: #f2f2f2; }`,
+        `</style></head>`,
+        `<body>`,
+        htmlTableContent, // Your generated HTML table
+        `</body></html>`
+    ].join("\n")
+};
