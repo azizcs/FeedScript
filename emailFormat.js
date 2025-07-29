@@ -432,3 +432,66 @@ return {
         `</body></html>`
     ].join("\n")
 };
+
+
+
+
+function calculateForecastConfidence(forecastRecords, daysToFull) {
+    if (!forecastRecords || daysToFull < 0) return 0;
+
+    // Get forecast bounds at the predicted 100% point
+    const upper = forecastRecords['dt.davis.forecast.upper']?.[daysToFull] || 100;
+    const lower = forecastRecords['dt.davis.forecast.lower']?.[daysToFull] || 100;
+
+    // Calculate range width (0-100 scale)
+    const rangeWidth = Math.min(100, upper - lower);
+
+    // Convert to confidence score (0-1 scale)
+    // Narrower range → Higher confidence
+    const confidence = 1 - (rangeWidth / 100);
+
+    return Math.round(confidence * 100) / 100; // Round to 2 decimals
+}
+
+
+
+export default async function ({ execution_id }) {
+    // ... (previous setup code) ...
+
+    for (const record of entityList.records) {
+        // ... (query execution code) ...
+
+        const prediction = result.output?.[0];
+        if (prediction?.forecastQualityAssessment !== "VALID") continue;
+
+        const forecastRecords = prediction.timeSeriesDataWithPredictions?.records?.[0];
+        const lowerForecast = forecastRecords?.['dt.davis.forecast.lower'] || [];
+        const daysToFull = lowerForecast.findIndex(val => val >= 100);
+
+        if (daysToFull >= 0) {
+            const confidence = calculateForecastConfidence(forecastRecords, daysToFull);
+
+            predictionSummary.violations.push({
+                // ... (existing fields) ...,
+                confidence: confidence,
+                confidenceIndicator: getConfidenceIndicator(confidence),
+                forecastRange: getForecastRange(forecastRecords, daysToFull)
+            });
+        }
+    }
+
+    return predictionSummary;
+}
+
+// Helper functions
+function getConfidenceIndicator(confidence) {
+    return confidence >= 0.8 ? "🟢 High" :
+           confidence >= 0.5 ? "🟡 Medium" : "🔴 Low";
+}
+
+function getForecastRange(records, dayIndex) {
+    return {
+        lower: records['dt.davis.forecast.lower']?.[dayIndex],
+        upper: records['dt.davis.forecast.upper']?.[dayIndex]
+    };
+}
