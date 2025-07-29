@@ -495,3 +495,36 @@ function getForecastRange(records, dayIndex) {
         upper: records['dt.davis.forecast.upper']?.[dayIndex]
     };
 }
+
+export default async function ({ execution_id }) {
+    const { violations } = await executionsClient.getTaskExecutionResult({
+        execution_id,
+        id: "predict_disk_full_capacity"
+    });
+
+    // 1. Generate strict CSV with requested fields
+    const csvHeader = "HostId,HostName,DiskId,Instance,CurrentUsage (%),CurrentDaysToFailure,Certainty,ConfidenceIndicator,PredictedDate";
+
+    const csvRows = violations.map(v => [
+        `"${v.hostId || 'N/A'}"`,        // HostId
+        `"${v.hostName}"`,               // HostName
+        `"${v.diskId}"`,                 // DiskId
+        `"${v.diskName}"`,               // Instance (renamed from DiskName)
+        v.currentUsage,                  // CurrentUsage (%)
+        v.daysLeft,                      // CurrentDaysToFailure
+        v.certainty?.toFixed(2) || 'N/A',// Certainty
+        `"${v.confidenceIndicator}"`,    // ConfidenceIndicator
+        `"${v.predictedDate}"`           // PredictedDate
+    ].join(','));
+
+    // 2. Combine into final CSV content
+    const emailBody = [csvHeader, ...csvRows].join('\n');
+
+    return {
+        subject: `[Disk Alert] ${violations.length} disks reaching capacity`,
+        body: emailBody, // Plain CSV as email body
+        to: "storage-team@company.com",
+        cc: "sre-team@company.com",
+        isHtml: false // Ensures CSV renders as plaintext
+    };
+}
