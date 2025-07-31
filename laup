@@ -1,0 +1,127 @@
+Creating Business Events for LAUPD AppLaunch in PAT Dynatrace
+For your LAUPD application with the single critical AppLaunch function (URL: /laupd/bootstrap), here's a streamlined approach to implement business events and LEI monitoring:
+
+Step-by-Step Implementation
+1. Create Business Event for AppLaunch
+Navigate to Business Events:
+
+Go to: Settings > Server-side service monitoring > Business events
+
+Click "Add business event"
+
+Configure AppLaunch Event:
+
+Name: LAUPD_AppLaunch
+
+Primary dimension: Request
+
+Rule configuration:
+
+text
+entity.type == "SERVICE"
+AND entity.name == "LAUPD_Service"
+AND request.path == "/laupd/bootstrap"
+Optional dimensions (add if relevant):
+
+request.method (probably GET)
+
+request.header.x-custom-header (if you have important headers)
+
+request.query.parameter (if URL has important parameters)
+
+2. Configure LEI Framework
+Navigate to LEI Settings:
+
+Go to: Settings > Monitoring > Load efficiency indicator
+
+Either create new or modify existing configuration
+
+Add AppLaunch as Key Transaction:
+
+Add the LAUPD_AppLaunch business event
+
+Set thresholds:
+
+Performance threshold: [Set your target response time, e.g., 1000ms]
+
+Error rate threshold: [Typically 1% or lower]
+
+Weight: 100% (since it's your only critical function)
+
+3. Create Monitoring Dashboard
+Create new dashboard:
+
+Go to: Dashboards > Create dashboard
+
+Name: "LAUPD AppLaunch Monitoring"
+
+Add key widgets:
+
+LEI score for LAUPD_AppLaunch
+
+Response time chart for /laupd/bootstrap
+
+Error rate chart
+
+Topology map showing dependencies
+
+User sessions affected by poor performance
+
+4. Set Up Alerts
+Create management zone (if needed):
+
+Go to: Settings > Management zones
+
+Create zone for LAUPD services
+
+Configure alerting profile:
+
+Go to: Settings > Alerting > Alerting profiles
+
+Create profile "LAUPD Critical Alerts"
+
+Add rules:
+
+LEI score below [threshold]
+
+Error rate increase for LAUPD_AppLaunch
+
+Response time degradation
+
+Validation Steps
+Generate test traffic:
+
+Make several calls to /laupd/bootstrap
+
+Verify events appear in "Transaction & services" view
+
+Check LEI calculation:
+
+Go to: Applications & microservices > Load efficiency indicator
+
+Verify LAUPD_AppLaunch appears and shows data
+
+Test alerts:
+
+Force an error condition
+
+Verify alert triggers appropriately
+
+
+
+
+
+configs:
+  - id: laupd_business_events
+    type:
+      settings:
+        schema: "builtin:business.events"
+        scope: "environment"
+    config:
+      name: "LAUPD_AppLaunch"
+      rules:
+        - rule: |
+            entity.type == "SERVICE" AND
+            entity.name == "LAUPD_Service" AND
+            request.path == "/laupd/bootstrap"
+        - primaryDimension: "REQUEST"
