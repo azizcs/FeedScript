@@ -1,0 +1,204 @@
+Step-by-Step Flow: Save Email Body to OneDrive
+Trigger: When a new email arrives (Outlook/Exchange)
+Action: Save email body as a .txt file in OneDrive.
+Steps to Create the Flow:
+Go to Power Automate and sign in.
+
+Click Create → Automated cloud flow.
+
+Name your flow (e.g., "Save Email Body to OneDrive").
+
+Choose a trigger:
+
+Search for "When a new email arrives (V3)" (Office 365 Outlook).
+
+Configure:
+
+Folder: Inbox (or a specific folder).
+
+Only with attachments: No (unless you want only emails with attachments).
+
+Include attachments: No (unless needed).
+
+Click "+ New step" → Search for "OneDrive for Business".
+
+Select "Create file" (OneDrive action).
+
+Folder Path: Choose where to save (e.g., /Automated Emails/).
+
+File Name: Use dynamic content like:
+
+text
+Email from @{triggerBody()?['from']?['emailAddress']?['name']} - @{formatDateTime(utcNow(), 'yyyy-MM-dd HHmmss')}.txt
+File Content: Select Body from the dynamic content (or Body HTML for rich text).
+
+Save & Test:
+
+Click Save, then Test → Manually (send yourself a test email).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Since your email body contains structured CSV-like data (disk health metrics), you can enhance the Power Automate flow to:
+
+Parse the CSV data from the email body.
+
+Save it as a proper CSV file in OneDrive (instead of raw text).
+
+(Optional) Filter/process high-risk disks (e.g., CurrentUsage > 90%).
+
+Here’s the improved flow:
+
+Updated Flow: Save Email Body as CSV to OneDrive
+Trigger: When a new email arrives (Office 365 Outlook).
+Actions:
+Extract and clean CSV data.
+
+Save as a timestamped CSV file in OneDrive.
+
+Step-by-Step Setup
+1. Trigger: "When a new email arrives (V3)"
+Configure:
+
+Folder: Inbox (or a subfolder).
+
+Subject Filter: Optional (e.g., "Disk Health Report").
+
+2. Parse CSV Data
+Add a "Compose" action to clean the email body:
+
+Input:
+
+plaintext
+Copy
+Download
+@{replace(triggerBody()?['Body'], '"', '')}
+(Removes extra quotes for proper CSV formatting.)
+
+3. Save as CSV in OneDrive
+Add a "Create file" action (OneDrive for Business):
+
+Folder Path: /DiskHealthReports/ (or your preferred path).
+
+File Name:
+
+text
+Copy
+Download
+DiskHealth_@{formatDateTime(utcNow(), 'yyyy-MM-dd_HHmmss')}.csv
+File Content: Output from the "Compose" step above.
+
+Optional Enhancements
+A. Filter High-Risk Disks
+Add a "Filter array" action (if you want to process only critical disks):
+
+Use "Data Operations - Select" to convert CSV to JSON.
+
+Filter rows where:
+
+CurrentUsage > 90 OR
+
+ConfidenceIndicator = "High".
+
+B. Notify Teams on Critical Disks
+Add a "Post a message in a chat or channel" (Teams) action if any disks exceed thresholds.
+
+C. Store in SharePoint/Excel
+Instead of OneDrive, use:
+
+"Create table" (Excel Online) or
+
+"Add a row" (SharePoint List).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Here’s how to modify your Power Automate flow to only process emails with specific subjects and senders, then save the filtered CSV data to OneDrive:
+
+Updated Flow with Filtering
+Trigger: When a new email arrives (Office 365 Outlook)
+Conditions:
+
+Email subject contains a keyword (e.g., "Disk Health Report").
+
+Sender’s email matches a trusted domain (e.g., @yourcompany.com).
+
+Step-by-Step Setup
+1. Trigger: "When a new email arrives (V3)"
+Keep the default settings (no filters here; we’ll add conditions later).
+
+2. Add Filtering Conditions
+After the trigger, add a "Condition" action (control flow):
+
+Condition 1: Check Subject
+
+text
+@contains(triggerBody()?['Subject'], 'Disk Health Report')
+(Replace 'Disk Health Report' with your keyword.)
+
+Condition 2: Check Sender
+
+text
+@endsWith(triggerBody()?['From']?['EmailAddress']?['Address'], '@yourcompany.com')
+(Replace @yourcompany.com with your trusted domain.)
+
+⚠️ Note: Use OR/AND logic if needed (e.g., allow multiple senders).
+
+3. Parse & Save CSV (Inside "Yes" Branch)
+If both conditions pass, add the same steps as before:
+
+"Compose" action to clean the email body (remove extra quotes).
+
+"Create file" in OneDrive with the CSV content.
+
+4. (Optional) Notify on Filtered Emails
+Add a "Post a message in Teams" or "Send an email" action to confirm processing.
+
+Example Condition Logic
+plaintext
+If (
+  Subject contains "Disk Health Report"
+  AND
+  Sender ends with "@yourcompany.com"
+)
+Then → Save CSV to OneDrive
+Else → Do nothing
+Key Notes
