@@ -95,7 +95,8 @@ Download
 3. Save as CSV in OneDrive
 Add a "Create file" action (OneDrive for Business):
 
-Folder Path: /DiskHealthReports/ (or your preferred path).
+Site Address: https://myteam.td.com/teams/MachineLearningasaServiceMLAS
+Folder Path: /Shared Documents/Days_to_Failure_Reports/
 
 File Name:
 
