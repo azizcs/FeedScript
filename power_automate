@@ -203,3 +203,24 @@ If (
 Then → Save CSV to OneDrive
 Else → Do nothing
 Key Notes
+
+
+
+
+
+Solution: Isolate & Clean the CSV Data
+Add a "Compose" Action to extract just the CSV portion:
+
+plaintext
+@{split(outputs('HTML_to_text'), 'HostId,HostName')[1]}
+(This splits the text at the CSV header and keeps everything after it.)
+
+Add another "Compose" Action to clean line breaks and quotes:
+
+plaintext
+@{replace(replace(replace(outputs('Compose'), '\n', ''), '\"', ''), '*', '')}
+Reconstruct the full CSV with headers:
+
+plaintext
+@{concat('HostId,HostName,DiskId,Instance,CurrentUsage (%),CurrentDaysToFailure,Certainty,ConfidenceIndicator,PredictedDate', outputs('Compose_2'))}
+Full Flow Adjustments
