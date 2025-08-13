@@ -224,3 +224,69 @@ Reconstruct the full CSV with headers:
 plaintext
 @{concat('HostId,HostName,DiskId,Instance,CurrentUsage (%),CurrentDaysToFailure,Certainty,ConfidenceIndicator,PredictedDate', outputs('Compose_2'))}
 Full Flow Adjustments
+
+
+
+
+Renamed & Organized Flow Steps
+1. Trigger
+Name: When new disk health email arrives
+*(Office 365 Outlook trigger with subject/sender filters)*
+
+2. Convert Email to Text
+Action: HTML to Text
+Name: 1. Convert email body to plain text
+
+3. Extract Raw CSV Data
+Action: Compose
+Name: 2. Extract CSV block after headers
+Formula:
+
+plaintext
+Copy
+Download
+@{split(outputs('1._Convert_email_body_to_plain_text'), 'HostId,HostName')[1]}
+4. Clean Special Characters
+Action: Compose
+Name: 3. Remove quotes, line breaks, and asterisks
+Formula:
+
+plaintext
+Copy
+Download
+@{replace(replace(replace(outputs('2._Extract_CSV_block_after_headers'), '\n', ''), '\"', ''), '*', '')}
+5. Reattach CSV Headers
+Action: Compose
+Name: 4. Add standardized CSV headers
+Formula:
+
+plaintext
+Copy
+Download
+@{concat('HostId,HostName,DiskId,Instance,CurrentUsage (%),CurrentDaysToFailure,Certainty,ConfidenceIndicator,PredictedDate', outputs('3._Remove_quotes_line_breaks_and_asterisks'))}
+6. Save to SharePoint
+Action: Create file
+Name: 5. Save cleaned CSV to SharePoint
+Settings:
+
+Site Address: https://myteam.td.com/teams/MachineLearningasaServiceMLAS
+
+Folder Path: /Shared Documents/Days_to_Failure_Reports/
+
+File Name: DiskHealth_@{formatDateTime(utcNow(), 'yyyy-MM-dd')}.csv
+
+File Content: Output from 4. Add standardized CSV headers
+
+Why These Names?
+Sequential numbering (1., 2., etc.) shows the flow order.
+
+Action summaries describe the transformation (e.g., "Remove quotes").
+
+Consistency makes debugging easier (e.g., all Compose actions start with verbs).
+
+Before/After Example
+Before (Generic)	After (Descriptive)
+"Compose"	"1. Convert email body to plain text"
+"Compose_2"	"2. Extract CSV block after headers"
+"Compose_3"	"3. Remove quotes, line breaks, and asterisks"
+Tips for Clarity
