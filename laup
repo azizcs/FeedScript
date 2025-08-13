@@ -1,127 +1,204 @@
-Creating Business Events for LAUPD AppLaunch in PAT Dynatrace
-For your LAUPD application with the single critical AppLaunch function (URL: /laupd/bootstrap), here's a streamlined approach to implement business events and LEI monitoring:
+Step-by-Step Flow: Save Email Body to OneDrive
+Trigger: When a new email arrives (Outlook/Exchange)
+Action: Save email body as a .txt file in OneDrive.
+Steps to Create the Flow:
+Go to Power Automate and sign in.
 
-Step-by-Step Implementation
-1. Create Business Event for AppLaunch
-Navigate to Business Events:
+Click Create → Automated cloud flow.
 
-Go to: Settings > Server-side service monitoring > Business events
+Name your flow (e.g., "Save Email Body to OneDrive").
 
-Click "Add business event"
+Choose a trigger:
 
-Configure AppLaunch Event:
+Search for "When a new email arrives (V3)" (Office 365 Outlook).
 
-Name: LAUPD_AppLaunch
+Configure:
 
-Primary dimension: Request
+Folder: Inbox (or a specific folder).
 
-Rule configuration:
+Only with attachments: No (unless you want only emails with attachments).
+
+Include attachments: No (unless needed).
+
+Click "+ New step" → Search for "OneDrive for Business".
+
+Select "Create file" (OneDrive action).
+
+Folder Path: Choose where to save (e.g., /Automated Emails/).
+
+File Name: Use dynamic content like:
 
 text
-entity.type == "SERVICE"
-AND entity.name == "LAUPD_Service"
-AND request.path == "/laupd/bootstrap"
-Optional dimensions (add if relevant):
+Email from @{triggerBody()?['from']?['emailAddress']?['name']} - @{formatDateTime(utcNow(), 'yyyy-MM-dd HHmmss')}.txt
+File Content: Select Body from the dynamic content (or Body HTML for rich text).
 
-request.method (probably GET)
+Save & Test:
 
-request.header.x-custom-header (if you have important headers)
-
-request.query.parameter (if URL has important parameters)
-
-2. Configure LEI Framework
-Navigate to LEI Settings:
-
-Go to: Settings > Monitoring > Load efficiency indicator
-
-Either create new or modify existing configuration
-
-Add AppLaunch as Key Transaction:
-
-Add the LAUPD_AppLaunch business event
-
-Set thresholds:
-
-Performance threshold: [Set your target response time, e.g., 1000ms]
-
-Error rate threshold: [Typically 1% or lower]
-
-Weight: 100% (since it's your only critical function)
-
-3. Create Monitoring Dashboard
-Create new dashboard:
-
-Go to: Dashboards > Create dashboard
-
-Name: "LAUPD AppLaunch Monitoring"
-
-Add key widgets:
-
-LEI score for LAUPD_AppLaunch
-
-Response time chart for /laupd/bootstrap
-
-Error rate chart
-
-Topology map showing dependencies
-
-User sessions affected by poor performance
-
-4. Set Up Alerts
-Create management zone (if needed):
-
-Go to: Settings > Management zones
-
-Create zone for LAUPD services
-
-Configure alerting profile:
-
-Go to: Settings > Alerting > Alerting profiles
-
-Create profile "LAUPD Critical Alerts"
-
-Add rules:
-
-LEI score below [threshold]
-
-Error rate increase for LAUPD_AppLaunch
-
-Response time degradation
-
-Validation Steps
-Generate test traffic:
-
-Make several calls to /laupd/bootstrap
-
-Verify events appear in "Transaction & services" view
-
-Check LEI calculation:
-
-Go to: Applications & microservices > Load efficiency indicator
-
-Verify LAUPD_AppLaunch appears and shows data
-
-Test alerts:
-
-Force an error condition
-
-Verify alert triggers appropriately
+Click Save, then Test → Manually (send yourself a test email).
 
 
 
 
 
-configs:
-  - id: laupd_business_events
-    type:
-      settings:
-        schema: "builtin:business.events"
-        scope: "environment"
-    config:
-      name: "LAUPD_AppLaunch"
-      rules:
-        - rule: |
-            entity.type == "SERVICE" AND
-            entity.name == "LAUPD_Service" AND
-            request.path == "/laupd/bootstrap"
-        - primaryDimension: "REQUEST"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Since your email body contains structured CSV-like data (disk health metrics), you can enhance the Power Automate flow to:
+
+Parse the CSV data from the email body.
+
+Save it as a proper CSV file in OneDrive (instead of raw text).
+
+(Optional) Filter/process high-risk disks (e.g., CurrentUsage > 90%).
+
+Here’s the improved flow:
+
+Updated Flow: Save Email Body as CSV to OneDrive
+Trigger: When a new email arrives (Office 365 Outlook).
+Actions:
+Extract and clean CSV data.
+
+Save as a timestamped CSV file in OneDrive.
+
+Step-by-Step Setup
+1. Trigger: "When a new email arrives (V3)"
+Configure:
+
+Folder: Inbox (or a subfolder).
+
+Subject Filter: Optional (e.g., "Disk Health Report").
+
+2. Parse CSV Data
+Add a "Compose" action to clean the email body:
+
+Input:
+
+plaintext
+Copy
+Download
+@{replace(triggerBody()?['Body'], '"', '')}
+(Removes extra quotes for proper CSV formatting.)
+
+3. Save as CSV in OneDrive
+Add a "Create file" action (OneDrive for Business):
+
+Folder Path: /DiskHealthReports/ (or your preferred path).
+
+File Name:
+
+text
+Copy
+Download
+DiskHealth_@{formatDateTime(utcNow(), 'yyyy-MM-dd_HHmmss')}.csv
+File Content: Output from the "Compose" step above.
+
+Optional Enhancements
+A. Filter High-Risk Disks
+Add a "Filter array" action (if you want to process only critical disks):
+
+Use "Data Operations - Select" to convert CSV to JSON.
+
+Filter rows where:
+
+CurrentUsage > 90 OR
+
+ConfidenceIndicator = "High".
+
+B. Notify Teams on Critical Disks
+Add a "Post a message in a chat or channel" (Teams) action if any disks exceed thresholds.
+
+C. Store in SharePoint/Excel
+Instead of OneDrive, use:
+
+"Create table" (Excel Online) or
+
+"Add a row" (SharePoint List).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Here’s how to modify your Power Automate flow to only process emails with specific subjects and senders, then save the filtered CSV data to OneDrive:
+
+Updated Flow with Filtering
+Trigger: When a new email arrives (Office 365 Outlook)
+Conditions:
+
+Email subject contains a keyword (e.g., "Disk Health Report").
+
+Sender’s email matches a trusted domain (e.g., @yourcompany.com).
+
+Step-by-Step Setup
+1. Trigger: "When a new email arrives (V3)"
+Keep the default settings (no filters here; we’ll add conditions later).
+
+2. Add Filtering Conditions
+After the trigger, add a "Condition" action (control flow):
+
+Condition 1: Check Subject
+
+text
+@contains(triggerBody()?['Subject'], 'Disk Health Report')
+(Replace 'Disk Health Report' with your keyword.)
+
+Condition 2: Check Sender
+
+text
+@endsWith(triggerBody()?['From']?['EmailAddress']?['Address'], '@yourcompany.com')
+(Replace @yourcompany.com with your trusted domain.)
+
+⚠️ Note: Use OR/AND logic if needed (e.g., allow multiple senders).
+
+3. Parse & Save CSV (Inside "Yes" Branch)
+If both conditions pass, add the same steps as before:
+
+"Compose" action to clean the email body (remove extra quotes).
+
+"Create file" in OneDrive with the CSV content.
+
+4. (Optional) Notify on Filtered Emails
+Add a "Post a message in Teams" or "Send an email" action to confirm processing.
+
+Example Condition Logic
+plaintext
+If (
+  Subject contains "Disk Health Report"
+  AND
+  Sender ends with "@yourcompany.com"
+)
+Then → Save CSV to OneDrive
+Else → Do nothing
+Key Notes
