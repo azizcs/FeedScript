@@ -275,3 +275,151 @@ export default async function ({ execution_id }) {
         return analyzerData.result;
     }
 }
+
+
+import {analyzersClient} from '@dynatrace-sdk/client-davis-analyzers';
+import {execution} from '@dynatrace-sdk/automation-utils';
+import { executionsClient } from '@dynatrace-sdk/client-automation';
+
+export default async function ({ execution_id }) {
+    const baseQuery = 'timeseries max(dt.host.disk.used.percent), by: {dt.entity.disk,dt.entity.host,host.name}, from:now()-30d, to:now(), interval: 1d, filter: in (dt.entity.disk, array(';
+    const entityList = await executionsClient.getTaskExecutionResult({executionId: execution_id, id: "query_entities_disk" });
+    const predictionSummary = { violations: [] };
+
+    // Process disk entities from the query result
+    const diskEntities = entityList.records.map(record => ({
+        id: record.disk?.id || record.disk,
+        hostId: record.id,
+        hostName: record.entity?.name || 'Unknown'
+    }));
+
+    console.log(`Processing ${diskEntities.length} disks in optimized batches`);
+
+    // Process in smaller batches to avoid timeout
+    const BATCH_SIZE = 10; // Further reduced to prevent DQL errors
+    let processedBatches = 0;
+
+    for (let startIdx = 0; startIdx < diskEntities.length; startIdx += BATCH_SIZE) {
+        const endIdx = Math.min(startIdx + BATCH_SIZE, diskEntities.length);
+        const batch = diskEntities.slice(startIdx, endIdx);
+
+        console.log(`Processing batch ${++processedBatches} (disks ${startIdx+1}-${endIdx})`);
+
+        try {
+            await processBatch(batch, predictionSummary);
+        } catch (error) {
+            console.error(`Batch ${processedBatches} failed:`, error.message);
+            // Continue with next batch despite errors
+        }
+
+        // Exit if we've processed enough to likely hit timeout soon
+        if (startIdx + BATCH_SIZE < diskEntities.length) {
+            console.log(`Completed batch ${processedBatches} - task will continue with retry`);
+            return {
+                status: "incomplete",
+                processedDisks: endIdx,
+                totalDisks: diskEntities.length,
+                summary: predictionSummary
+            };
+        }
+    }
+
+    return predictionSummary;
+
+    async function processBatch(batch, summary) {
+        let queryString = '';
+
+        // Build query for this batch
+        for (let i = 0; i < batch.length; i++) {
+            queryString += `"${batch[i].id}"`;
+            if (i < batch.length - 1) queryString += ',';
+        }
+
+        const fullQuery = baseQuery + queryString + ')) | fieldsAdd disk.name = entityname(dt.entity.disk), host.name = entityname(dt.entity.host)';
+
+        console.log(`Executing analyzer for batch of ${batch.length} disks`);
+
+        // ✅ CORRECT ANALYZER NAME
+        const response = await analyzersClient.executeAnalyzer({
+            analyzerName: 'davis.anomaly_detection.GenericForecastAnalyzer', // FIXED
+            body: {
+                timeSeriesData: { expression: fullQuery },
+                forecastHorizon: 90, // Reduced from 365 to improve performance
+                coverageProbability: 0.9,
+                nPaths: 200,
+                applyZeroLowerBoundHeuristic: true,
+                useModelCache: true
+            },
+        });
+
+        const analyzerResult = response.result.executionStatus !== "COMPLETED"
+            ? await pollWithTimeout(response, 30000) // 30s timeout for polling
+            : response.result;
+
+        calculateDaysToFullCapacity(analyzerResult, summary);
+    }
+
+    function calculateDaysToFullCapacity(result, summary) {
+        if (result?.executionStatus !== 'COMPLETED') {
+            console.warn('Analysis not completed. Status:', result?.executionStatus);
+            return;
+        }
+
+        result.output?.forEach((prediction, index) => {
+            if (prediction.analysisStatus !== 'OK' || prediction.forecastQualityAssessment !== 'VALID') {
+                return;
+            }
+
+            const historicalRecord = prediction.analyzedTimeSeriesQuery?.records?.[0];
+            const forecastRecord = prediction.timeSeriesDataWithPredictions?.records?.[0];
+
+            if (!historicalRecord || !forecastRecord) {
+                return;
+            }
+
+            // 1. Get CURRENT usage from historical data
+            const usageData = historicalRecord['max(dt.host.disk.used.percent)'];
+            const currentUsage = Array.isArray(usageData) ? usageData.slice(-1)[0] : null;
+
+            // 2. Get LOWER forecast values
+            const lowerForecast = forecastRecord['dt.davis.forecast.lower'] || [];
+            const daysToFull = lowerForecast.findIndex(val => val >= 100);
+
+            if (daysToFull >= 0 && currentUsage < 100) {
+                summary.violations.push({
+                    diskId: forecastRecord['dt.entity.disk'],
+                    diskName: forecastRecord['disk.name'],
+                    hostId: forecastRecord['dt.entity.host'],
+                    hostName: forecastRecord['host.name'],
+                    currentUsage,
+                    daysUntilFull: daysToFull + 1,
+                    predictedDate: new Date(Date.now() + (daysToFull + 1) * 86400000).toISOString()
+                });
+            }
+        });
+    }
+
+    async function pollWithTimeout(response, timeoutMs) {
+        const startTime = Date.now();
+        let analyzerData = response;
+
+        do {
+            // Check timeout
+            if (Date.now() - startTime > timeoutMs) {
+                throw new Error(`Polling timeout after ${timeoutMs}ms`);
+            }
+
+            const token = analyzerData.requestToken;
+            analyzerData = await analyzersClient.pollAnalyzerExecution({
+                analyzerName: 'davis.anomaly_detection.GenericForecastAnalyzer', // FIXED
+                requestToken: token,
+            });
+
+            // Add small delay between polls
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+        } while (analyzerData.result.executionStatus !== "COMPLETED");
+
+        return analyzerData.result;
+    }
+}
