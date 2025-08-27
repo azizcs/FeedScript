@@ -75,11 +75,11 @@ export default async function ({ execution_id }) {
             }
 
             // Historical data (current usage)
-            const historicalRecord = prediction.analyzedTimeSeriesQuery?.records?.[0];
+            const historicalRecord = prediction.analyzedTimeSeriesQuery?.expression?.records?.[0];
             console.log('[HISTORICAL] Record keys:', historicalRecord ? Object.keys(historicalRecord) : 'MISSING');
 
             // Forecast data (future prediction)
-            const forecastRecord = prediction.timeSeriesDataWithPredictions?.records?.[0];
+            const forecastRecord = prediction.timeSeriesDataWithPredictions?.expression?.records?.[0];
             console.log('[FORECAST] Record keys:', forecastRecord ? Object.keys(forecastRecord) : 'MISSING');
 
             if (!historicalRecord || !forecastRecord) {
@@ -97,7 +97,7 @@ export default async function ({ execution_id }) {
             console.log(`[CURRENT] Disk usage: ${currentUsage}%`);
 
             // 2. Get LOWER forecast values
-            const lowerForecast = forecastRecord['dt.davis.forecast.lower'] || [];
+            const lowerForecast = forecastRecord['dt.davis.forecast:lower'] || [];
             console.log('[FORECAST] Lower forecast samples (first/last):',
                        lowerForecast?.slice(0, 3), '...',
                        lowerForecast?.slice(-3));
