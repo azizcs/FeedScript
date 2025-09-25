@@ -349,3 +349,26 @@ Create a custom security review checklist for your specific codebase?
 Explain how to fix common ASP Classic security issues?
 
 The file backdoor.asp in your list is particularly concerning from a security perspective - I'd recommend reviewing that file immediately.
+
+
+
+# Open PowerShell as Administrator
+# Navigate to your ASP project folder
+cd "C:\path\to\your\asp\code"
+
+# Enable script execution (if needed)
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+
+# Run the security scan
+.\SecurityScan.ps1
+
+
+
+
+.\SecurityScan.ps1 -ScanPath "C:\Your\ASP\Project" -Detailed
+
+
+
+.\SecurityScan.ps1 -ExportResults -Detailed
+
+.\SecurityScan.ps1 -ScanPath "C:\Your\Project" -Detailed -ExportResults
