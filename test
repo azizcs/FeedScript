@@ -76,3 +76,33 @@ After reviewing the situation with David and Jagroop, we initially planned to re
 All investigations were carried out in the DEV environment, and no code modifications were made during this process.
 
 I’m now looking into the current “Column out of range SQL” error. My initial assessment suggests it might be due to a mismatch between the column names in the source and destination databases, but I’ll be investigating it further.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

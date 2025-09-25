@@ -1,0 +1,351 @@
+VS Code Tools & Extensions
+1. Basic Analysis Extensions
+ASP Classic/VBScript Syntax Highlighter - For proper syntax coloring
+
+VBScript Language Support - Better IntelliSense and syntax validation
+
+File Utils - For counting files and lines across the project
+
+2. Line Counting
+bash
+
+Copy
+
+Download
+# Using PowerShell in VS Code terminal:
+Get-ChildItem -Recurse -Include *.asp | Get-Content | Measure-Object -Line
+
+# Using find (if you have Windows Subsystem for Linux):
+find . -name "*.asp" -exec wc -l {} +
+3. Code Metrics Extensions
+Code Metrics - Measures complexity (though limited for ASP Classic)
+
+Line Counter - Specifically counts lines of code
+
+Visual Studio 2022 Approach
+1. Create a Solution/Project
+Create an empty ASP.NET project
+
+Add your ASP files as "Content" files
+
+Use VS's built-in analysis tools
+
+2. Built-in Analysis Tools
+Code Metrics Calculator (via Analyze menu)
+
+Find All References for dependency mapping
+
+Architecture Explorer for code structure
+
+Specialized Security Analysis Tools
+1. Security Scanners
+Microsoft Security Code Analysis Extension
+
+SonarLint (limited ASP Classic support)
+
+VisualCodeGrepper - Specifically for classic ASP/VB
+
+2. ASP Classic Specific Tools
+ASP-Audit (command-line tool)
+
+CodeScan (commercial, good ASP support)
+
+Manual Analysis Methods
+1. Technology Stack Identification
+vbscript
+
+Copy
+
+Download
+' Look for these patterns in your code:
+' Database connections: ADODB.Connection, SQL queries
+' Includes: <!--#include file="..."-->
+' COM components: Server.CreateObject
+' Session/Application state usage
+2. Security Vulnerability Checks
+SQL injection vulnerabilities (Request.QueryString, Request.Form without validation)
+
+Cross-site scripting (XSS) opportunities
+
+File inclusion risks
+
+Authentication/authorization flaws
+
+Recommended Workflow
+Phase 1: Inventory & Metrics
+Use VS Code with line counting extensions
+
+Create a file inventory with basic statistics
+
+Identify main technology patterns
+
+Phase 2: Security Analysis
+Run VisualCodeGrepper for security issues
+
+Manual review of authentication flows
+
+Database interaction analysis
+
+Phase 3: Architecture Understanding
+Map include file dependencies
+
+Identify main business logic flows
+
+Document COM component usage
+
+Specific Tools for Your Case
+Given your file names suggest enterprise-level code, I'd recommend:
+
+Start with VS Code + these extensions:
+
+"VBScript" by Michel Calhoun
+
+"ASP Classic" by John Johnson
+
+"Code Metrics" by Kris van der Mast
+
+For security:
+
+Download and run VisualCodeGrepper
+
+Focus on SQL injection and file inclusion vulnerabilities
+
+For architecture:
+
+Create a dependency graph using include statements
+
+Use Dependency Walker for COM component analysis
+
+Would you like me to provide specific instructions for any of these approaches, or do you have a particular aspect (security, metrics, architecture) you'd like to focus on first?
+
+This response is AI-generated, for reference only.
+Security
+Security Analysis for ASP Classic Codebase
+Here's a comprehensive security analysis approach for your ASP Classic code:
+
+1. Immediate Security Tools
+Primary Security Scanner
+VisualCodeGrepper (VCG) - Specifically designed for classic ASP/VB
+
+bash
+
+Copy
+
+Download
+# Download and run VCG against your codebase
+VisualCodeGrepper.exe -f "C:\your\asp\code\path" -t asp
+VS Code Security Extensions
+Security Scan - Basic vulnerability detection
+
+Vulnerability Scanner - Pattern-based security analysis
+
+2. Critical ASP Classic Security Vulnerabilities to Scan For
+SQL Injection Patterns
+asp
+
+Copy
+
+Download
+<!-- DANGEROUS PATTERNS -->
+<%
+sql = "SELECT * FROM users WHERE id = " & Request.QueryString("id")
+sql = "INSERT INTO table VALUES ('" & Request.Form("name") & "')"
+%>
+
+<!-- SECURE PATTERN -->
+<%
+Set cmd = Server.CreateObject("ADODB.Command")
+cmd.Parameters.Append cmd.CreateParameter("@id", adInteger, adParamInput, , Request.QueryString("id"))
+%>
+File Inclusion Vulnerabilities
+asp
+
+Copy
+
+Download
+<!-- VULNERABLE -->
+<!--#include file="<% =Request.QueryString("template") %>"-->
+
+<!-- SECURE -->
+<!--#include file="fixed_file.asp"-->
+3. Manual Security Review Checklist
+Authentication & Session Management
+asp
+
+Copy
+
+Download
+' Check for:
+If Session("admin") = True Then ' Weak session management
+If Request.Cookies("auth") = "secret" Then ' Insecure authentication
+Input Validation Issues
+asp
+
+Copy
+
+Download
+' Look for missing validation:
+user_input = Request.Form("username")
+' Should have validation like:
+If IsNumeric(user_input) Then
+If Len(Trim(user_input)) > 0 Then
+File Operations Security
+asp
+
+Copy
+
+Download
+' Dangerous file operations:
+Set fso = CreateObject("Scripting.FileSystemObject")
+fso.DeleteFile(Request.QueryString("file")) ' User-controlled file deletion
+4. Automated Security Script
+Create this PowerShell script for initial security scanning:
+
+powershell
+
+Copy
+
+Download
+# SecurityScan.ps1
+$aspFiles = Get-ChildItem -Recurse -Include *.asp
+
+# SQL Injection Patterns
+$sqlPatterns = @(
+    "Request\.QueryString[^&]*&",
+    "Request\.Form[^&]*&",
+    "exec\(|sp_",
+    "xp_cmdshell"
+)
+
+# XSS Patterns
+$xssPatterns = @(
+    "Response\.Write.*Request",
+    "<%=",
+    "alert\("
+)
+
+foreach ($file in $aspFiles) {
+    $content = Get-Content $file.FullName -Raw
+    Write-Host "Scanning: $($file.Name)"
+
+    foreach ($pattern in $sqlPatterns) {
+        if ($content -match $pattern) {
+            Write-Warning "Possible SQL Injection in $($file.Name): $pattern"
+        }
+    }
+}
+5. VS Code Search Patterns
+Use these regex patterns in VS Code search:
+
+SQL Injection Detection
+text
+
+Copy
+
+Download
+Request\.(QueryString|Form)\[["'][^"']+["']\][^&]*&
+exec\(.*Request
+sp_.*&.*Request
+XSS Detection
+text
+
+Copy
+
+Download
+Response\.Write.*Request
+<%=.*Request
+Server\.Execute.*Request
+File Inclusion Risks
+text
+
+Copy
+
+Download
+#include.*Request
+Server\.MapPath.*Request
+6. Critical Files to Prioritize
+Based on your file list, focus on these high-risk files:
+
+High Priority Security Review:
+
+admin.asp - Admin functionality
+
+backdoor.asp - Suspicious name! ⚠️
+
+emer_login.asp - Emergency login
+
+authfailed.asp - Authentication logic
+
+deleterecordsadmin.asp - Data deletion
+
+edit*.asp - All edit functions
+
+7. Database Security Analysis
+Check for these connection patterns:
+
+asp
+
+Copy
+
+Download
+' UNSAFE connection strings in code
+connStr = "Provider=SQLOLEDB;Data Source=.;Initial Catalog=db;User Id=sa;Password=password;"
+
+' Look for hardcoded credentials
+' Check if connection strings are in external config files
+8. Specific Code Patterns to Hunt
+Authentication Bypass
+asp
+
+Copy
+
+Download
+' Look for hidden admin parameters
+If Request("admin") = "true" Then Session("admin") = True
+If Request("debug") = "1" Then ' Debug modes that bypass security
+Direct Object Reference
+asp
+
+Copy
+
+Download
+' User-controlled file access
+file = Request("file")
+Set fso = CreateObject("Scripting.FileSystemObject")
+fso.OpenTextFile(Server.MapPath(file))
+9. Quick Security Assessment Command
+Run this in your project root:
+
+bash
+
+Copy
+
+Download
+# Count security-sensitive patterns
+grep -r "Request\.QueryString" *.asp | wc -l
+grep -r "exec(" *.asp | wc -l
+grep -r "Scripting.FileSystemObject" *.asp | wc -l
+grep -r "password" *.asp -i | wc -l
+10. Immediate Action Items
+Run VisualCodeGrepper first - it's specifically made for ASP Classic
+
+Manually review backdoor.asp - this filename is a major red flag
+
+Check all admin pages for authentication bypass possibilities
+
+Scan for hardcoded credentials in connection strings
+
+Review file upload/download functionality for path traversal
+
+Next Steps:
+Would you like me to:
+
+Provide a more detailed analysis of specific file patterns?
+
+Help you set up automated security scanning?
+
+Create a custom security review checklist for your specific codebase?
+
+Explain how to fix common ASP Classic security issues?
+
+The file backdoor.asp in your list is particularly concerning from a security perspective - I'd recommend reviewing that file immediately.
