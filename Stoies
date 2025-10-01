@@ -140,3 +140,48 @@ Integration Points: Document external system integrations or API calls
 Story 3: Technical Deep Dive & Security Assessment
 Description
 Conduct technical analysis of security implementation, data access patterns, and infrastructure dependencies.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Invoke-WebRequest -Uri "https://myteam.td.com/teams/DaystoFailureReport/Shared_Documents/Days_to_Failure_Reports/DiskHealth_report.csv" -OutFile ".\DiskHealth_report.csv" -UseDefaultCredentials
+
+
+
+
+$url = "https://myteam.td.com/teams/DaystoFailureReport/Shared_Documents/Days_to_Failure_Reports/DiskHealth_report.csv"
+$outputPath = "C:\temp\DiskHealth_report.csv"
+
+# Download the file
+Invoke-WebRequest -Uri $url -OutFile $outputPath
+
+
