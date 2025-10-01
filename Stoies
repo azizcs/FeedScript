@@ -68,3 +68,75 @@ Events actively capturing data in PROD.
 Dashboards show LAUPD App metrics.
 
 CHG ticket closed (if used).
+
+
+
+
+
+
+
+
+
+Sprint Story: Codebase Analysis and Documentation
+Story Description
+As a development team member
+I want to thoroughly analyze and understand the ASP Classic codebase structure and functionality
+So that we can effectively maintain, enhance, and potentially modernize the application with full awareness of technical dependencies and business logic.
+
+Story 1: Initial Codebase Reconnaissance
+Description
+Conduct initial discovery of the ASP Classic application to understand the overall architecture, file structure, and key components.
+
+Acceptance Criteria
+✅ MUST HAVE
+Inventory Completion: All .asp, .asa, .inc, and related files are cataloged with basic metadata (size, last modified)
+
+Line Count Report: Generate comprehensive line count report using CLOC showing code vs comments vs blanks by file type
+
+Architecture Diagram: Create high-level architecture diagram showing main components and their relationships
+
+Entry Points Identified: Document all application entry points (default.asp, index.asp, main landing pages)
+
+Global.asa Analysis: Complete analysis of Global.asa including application/session events and global variables
+
+✅ SHOULD HAVE
+Dependency Map: Visual map of include file dependencies and page relationships
+
+Technology Stack: Document all identified technologies (COM components, database providers, third-party libraries)
+
+Folder Structure: Documented folder hierarchy with purpose descriptions for each major directory
+
+💡 COULD HAVE
+Initial Risk Assessment: Identify obvious technical debt or security concerns
+
+Code Quality Metrics: Basic metrics on code complexity and documentation levels
+
+Story 2: Functional Module Analysis
+Description
+Analyze and document the core functional modules and business processes implemented in the application.
+
+Acceptance Criteria
+✅ MUST HAVE
+Module Inventory: Complete list of functional modules with descriptions (User Management, Reporting, Data Processing, etc.)
+
+Business Process Flows: Document at least 3 core business process flows with step-by-step page navigation
+
+Database Interaction Map: Identify all database connection methods and key tables accessed
+
+Form Processing: Document major form submission flows and data validation approaches
+
+✅ SHOULD HAVE
+Authentication/Authorization: Document login process and role-based access control implementation
+
+Key Algorithms: Identify and document complex business logic or calculation algorithms
+
+Error Handling: Document error handling patterns and user notification methods
+
+💡 COULD HAVE
+Performance Patterns: Identify potential performance bottlenecks or optimization opportunities
+
+Integration Points: Document external system integrations or API calls
+
+Story 3: Technical Deep Dive & Security Assessment
+Description
+Conduct technical analysis of security implementation, data access patterns, and infrastructure dependencies.
