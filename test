@@ -80,7 +80,18 @@ I’m now looking into the current “Column out of range SQL” error. My initi
 
 
 
+# This uses the same authentication as your browser
+powershell -Command "Invoke-WebRequest -Uri 'YOUR_SHAREPOINT_URL' -OutFile 'download.csv' -UseDefaultCredentials -UseBasicParsing"
 
+
+
+powershell -Command "
+$headers = @{
+    'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    'Accept' = '*/*'
+}
+Invoke-WebRequest -Uri 'YOUR_SHAREPOINT_URL' -Headers $headers -OutFile 'download.csv' -UseDefaultCredentials
+"
 
 
 
