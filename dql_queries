@@ -1,0 +1,495 @@
+fetch dt.host.cpu.usage
+| lookup dt.host.metadata on host
+| summarize avg(value) by host, os, environment, bin(timestamp, 5m)
+
+
+fetch dt.host.disk.free
+| summarize min(value), avg(value) by host, disk, bin(timestamp, 5m)
+
+
+fetch dt.host.disk.utilization
+| summarize max(value) by host, disk, bin(timestamp, 5m)
+
+
+fetch dt.process.mem.working_set
+| summarize avg(value) by process, host, bin(timestamp, 5m)
+
+
+1. CPU usage per host
+fetch dt.host.cpu.usage
+| summarize avg(value), max(value) by host
+
+2. Memory usage
+fetch dt.host.mem.usage
+| summarize avg(value), max(value) by host
+
+3. Disk usage (free space / used %)
+fetch dt.host.disk.usedPercent
+| summarize avg(value), max(value) by host, disk
+
+4. Network throughput
+fetch dt.host.net.bytes
+| summarize sum(value) by host, direction
+
+5. Host CPU + Memory in one query
+fetch dt.host.cpu.usage, dt.host.mem.usage
+| summarize avg(cpu := dt_host_cpu_usage), avg(mem := dt_host_mem_usage) by host
+
+
+ost Useful Infrastructure Metric IDs
+
+Here is a ready-to-use list:
+
+CPU
+builtin:host.cpu.usage
+builtin:host.cpu.idle
+builtin:host.cpu.user
+builtin:host.cpu.system
+
+Memory
+builtin:host.mem.usage
+builtin:host.mem.total
+builtin:host.mem.used
+builtin:host.mem.free
+
+Disk
+builtin:host.disk.usedPercent
+builtin:host.disk.free
+builtin:host.disk.used
+builtin:host.disk.queueLength
+
+Network
+builtin:host.net.bytesSent
+builtin:host.net.bytesReceived
+builtin:host.net.packetsLost
+builtin:host.net.errors
+
+Processes
+builtin:process.cpu.usage
+builtin:process.mem.usage
+builtin:process.mem.workingSet
+
+
+✅ 1. Metrics API v2 – Fetch Infrastructure Metrics
+🔥 CPU Usage (per host)
+
+Metric ID: builtin:host.cpu.usage
+
+CURL
+curl -X GET \
+  "https://<your-env>.live.dynatrace.com/api/v2/metrics/query?metric=builtin:host.cpu.usage&resolution=5m" \
+  -H "Authorization: Api-Token YOUR_TOKEN"
+
+JavaScript
+const fetch = require("node-fetch");
+
+const DT_URL = "https://<your-env>.live.dynatrace.com";
+const TOKEN = "YOUR_TOKEN";
+
+async function cpuUsage() {
+  const url = `${DT_URL}/api/v2/metrics/query?metric=builtin:host.cpu.usage&resolution=5m`;
+
+  const res = await fetch(url, {
+    headers: { "Authorization": `Api-Token ${TOKEN}` }
+  });
+
+  console.log(await res.json());
+}
+
+cpuUsage();
+
+✅ 2. Memory Usage
+
+Metric ID: builtin:host.mem.usage
+
+CURL
+curl -X GET \
+  "https://<env>.live.dynatrace.com/api/v2/metrics/query?metric=builtin:host.mem.usage" \
+  -H "Authorization: Api-Token YOUR_TOKEN"
+
+✅ 3. Disk Usage
+
+Common disk metrics:
+
+Metric	Description
+builtin:host.disk.usedPercent	Disk % used
+builtin:host.disk.free	Free bytes
+builtin:host.disk.used	Used bytes
+builtin:host.disk.queueLength	Queue length
+CURL (disk % used)
+curl -X GET \
+  "https://<env>.live.dynatrace.com/api/v2/metrics/query?metric=builtin:host.disk.usedPercent" \
+  -H "Authorization: Api-Token YOUR_TOKEN"
+
+✅ 4. Network Throughput
+
+Metrics:
+
+Metric	Description
+builtin:host.net.bytesSent	Sent bytes
+builtin:host.net.bytesReceived	Received bytes
+builtin:host.net.packetsLost	Packet loss
+Example (bytes sent)
+curl -X GET \
+  "https://<env>.live.dynatrace.com/api/v2/metrics/query?metric=builtin:host.net.bytesSent" \
+  -H "Authorization: Api-Token YOUR_TOKEN"
+
+✅ 5. Fetch Host List (Entity API v2)
+
+Useful to map hosts to metrics.
+
+CURL
+curl -X GET \
+  "https://<env>.live.dynatrace.com/api/v2/entities?entitySelector=type(HOST)" \
+  -H "Authorization: Api-Token YOUR_TOKEN"
+
+JavaScript
+async function getHosts() {
+  const url = `${DT_URL}/api/v2/entities?entitySelector=type(HOST)`;
+
+  const res = await fetch(url, {
+    headers: { "Authorization": `Api-Token ${TOKEN}` }
+  });
+
+  console.log(await res.json());
+}
+
+getHosts();
+
+
+
+
+
+
+
+
+1. How the Monitored Entities + Custom Tags API works
+
+Dynatrace lets you:
+
+A. Tag infrastructure entities
+
+HOST
+
+PROCESS_GROUP
+
+SERVICE
+
+DISK
+
+CONTAINER_GROUP
+
+KUBERNETES_CLUSTER
+
+VMWARE_VM
+
+AWS_EC2_INSTANCE
+etc.
+
+B. Filter entities using custom tags
+
+You can retrieve only:
+
+specific hosts
+
+specific disks
+
+specific processes
+
+specific containers
+
+using tags like:
+
+tag("infra:cpu")
+tag("infra:memory")
+tag("infra:disk")
+tag("production")
+tag("server-type:database")
+
+🚀 2. API to Apply Custom Tags
+PUT Custom Tags to an Entity
+Example: Tag a host for CPU monitoring:
+curl -X POST \
+  "https://<env>.live.dynatrace.com/api/v2/entities/<HOST-ID>/tags" \
+  -H "Authorization: Api-Token <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "key": "infra",
+        "value": "cpu"
+      }'
+
+
+You can tag hosts for different infra monitoring areas:
+
+Tag	Meaning
+infra:cpu	Host should be included in CPU monitoring exports
+infra:memory	Memory monitored
+infra:disk	Disk monitored
+infra:network	NIC monitored
+🌐 3. Fetch Monitored Entities by Custom Tags
+
+Now that entities are tagged, you can retrieve only those entities.
+
+Fetch all hosts tagged with infra:cpu
+curl -X GET \
+  "https://<env>.live.dynatrace.com/api/v2/entities?entitySelector=type(HOST),tag(infra:cpu)" \
+  -H "Authorization: Api-Token <TOKEN>"
+
+📌 4. JavaScript Example – Get Monitored Hosts Tagged for Infra
+import fetch from "node-fetch";
+
+const DT_URL = "https://<env>.live.dynatrace.com";
+const TOKEN = "<TOKEN>";
+
+async function getInfraHosts() {
+  const selector = encodeURIComponent('type(HOST),tag(infra:cpu)');
+  const url = `${DT_URL}/api/v2/entities?entitySelector=${selector}`;
+
+  const res = await fetch(url, {
+    headers: { "Authorization": `Api-Token ${TOKEN}` }
+  });
+
+  const json = await res.json();
+  console.log(json);
+}
+
+getInfraHosts();
+
+
+Replace "infra:cpu" with:
+
+infra:memory
+
+infra:disk
+
+infra:network
+
+or your own custom tags.
+
+📦 5. Fetch Disks, Processes, Containers Using Custom Tags
+Disks tagged for monitoring
+curl -X GET \
+  "https://<env>.live.dynatrace.com/api/v2/entities?entitySelector=type(DISK),tag(infra:disk)" \
+  -H "Authorization: Api-Token <TOKEN>"
+
+Process Groups tagged
+"entitySelector=type(PROCESS_GROUP),tag(infra:memory)"
+
+Container Groups tagged
+"entitySelector=type(CONTAINER_GROUP),tag(infra:cpu)"
+
+🔥 6. Combine Monitored Entities + Metrics Query
+
+Once you fetch entities with custom tags,
+you can use their IDs to get metrics:
+
+Example: Fetch CPU metrics only for tagged hosts
+
+1️⃣ Get ID list:
+
+GET /api/v2/entities?entitySelector=type(HOST),tag(infra:cpu)
+
+
+2️⃣ Query metrics for these hosts:
+
+curl -X GET \
+  "https://<env>.live.dynatrace.com/api/v2/metrics/query?metric=builtin:host.cpu.usage&entitySelector=tag(infra:cpu)" \
+  -H "Authorization: Api-Token <TOKEN>"
+
+
+This is extremely powerful because:
+
+✔ You don’t need to manually specify host IDs
+✔ You can auto-group infrastructure components
+✔ Works for CPU, memory, disk, NICs, processes, containers
+🎯 7. Ideal Tagging Strategy for Infrastructure Monitoring
+
+You can use a tagging model like this:
+
+Entity Type	Custom tag	Purpose
+Host	infra:cpu	CPU monitoring
+Host	infra:memory	Memory monitoring
+Disk	infra:critical	Free-space monitoring
+Process	infra:backend	High-CPU process monitoring
+VM / Container	infra:k8s	Kubernetes infra export
+Service	env:prod	Restrict to production
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1. Retrieve all Settings Objects from audit logs
+fetch logs
+| filter dt.audit.category == "settings"
+| fields timestamp, dt.audit.user, dt.audit.action, dt.audit.objectId, dt.audit.objectType, dt.audit.data
+| sort timestamp desc
+
+
+This query returns all settings operations (create/update/delete) that were logged.
+
+✅ 2. Retrieve only Settings Object IDs and Types
+fetch logs
+| filter dt.audit.category == "settings"
+| fields timestamp, dt.audit.objectId, dt.audit.objectType
+| sort timestamp desc
+
+✅ 3. Retrieve only "Settings Objects" created or modified
+fetch logs
+| filter dt.audit.category == "settings"
+| filter dt.audit.action in ("CREATE", "UPDATE")
+| fields timestamp, dt.audit.user, dt.audit.objectId, dt.audit.objectType, dt.audit.data
+| sort timestamp desc
+
+
+
+
+
+import fetch from "node-fetch";
+
+const DT_ENV_URL = "https://YOUR_ENV_ID.live.dynatrace.com";
+const DT_API_TOKEN = "YOUR_API_TOKEN";
+
+async function getBuiltinSchemas() {
+  const url = `${DT_ENV_URL}/api/v2/settings/schemas?schemaIds=builtin%3A*&pageSize=500`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Authorization": `Api-Token ${DT_API_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    console.error("Error:", response.status, response.statusText);
+    const errorBody = await response.text();
+    console.error(errorBody);
+    return;
+  }
+
+  const data = await response.json();
+
+  console.log("Total builtin schemas:", data.totalCount);
+  data.items.forEach((schema) => {
+    console.log(`- ${schema.id}   |   ${schema.displayName}`);
+  });
+}
+
+getBuiltinSchemas();
+
+
+
+
+
+
+
+
+1. Host Monitoring (CPU, Memory, Disk, Load, Network)
+📌 Core Infrastructure Schemas
+Category	Builtin Schema	Purpose
+Host CPU & Memory	builtin:host.monitoring	Main host monitoring configuration (CPU, memory, NICs)
+CPU Anomaly Detection	builtin:anomaly-detection.rum-host-cpu	Detects unusual CPU spikes
+Memory Anomaly Detection	builtin:anomaly-detection.rum-host-memory	Detects memory usage anomalies
+Host Availability	builtin:availability	Uptime & availability monitoring
+Host Groups	builtin:host-group	Organize hosts for infrastructure monitoring rules
+📀 2. Disk Monitoring
+Schema	Description
+builtin:host.disk-monitoring	Disk utilization, read/write IOPS, free space monitoring
+builtin:anomaly-detection.host-disk	Disk latency and throughput anomaly detection
+🌐 3. Network Monitoring
+Schema	Description
+builtin:anomaly-detection.host-network	Host network anomaly detection (traffic drops, saturation)
+builtin:host-monitoring.network-interfaces	Enable/disable NIC monitoring
+🧵 4. Process & Service Infrastructure
+Schema	Description
+builtin:process-group.monitoring	Monitoring rules for process groups
+builtin:process-group.simple-alert	Threshold-based CPU/memory alerts for processes
+builtin:process-group-availability	Infrastructure availability monitoring for processes
+builtin:service.detection.process-group	Infrastructure service definition via process groups
+
+
+
+
+import fetch from "node-fetch";
+
+const DT_URL = "https://<your-env-id>.live.dynatrace.com";
+const TOKEN = "<YOUR_API_TOKEN>";
+
+async function fetchSchemas() {
+  const url = `${DT_URL}/api/v2/settings/schemas?fields=objectId,value`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Authorization": `Api-Token ${TOKEN}`
+    }
+  });
+
+  const data = await response.json();
+
+  const builtinSchemas = data.items
+    .map(s => s.schemaId)
+    .filter(id => id.startsWith("builtin:"));
+
+  console.log("Total builtin:* schemas:", builtinSchemas.length);
+  console.log(builtinSchemas);
+}
+
+fetchSchemas();
+
+
+
+2. JavaScript — Retrieve Only Infrastructure-Related Schemas
+
+Filtering CPU, memory, disk, network, host, process, OS services, VM/container schemas:
+
+import fetch from "node-fetch";
+
+const DT_URL = "https://<your-env-id>.live.dynatrace.com";
+const TOKEN = "<YOUR_API_TOKEN>";
+
+const INFRA_KEYWORDS = [
+  "host",
+  "cpu",
+  "memory",
+  "disk",
+  "network",
+  "process",
+  "os",
+  "cloud",
+  "kubernetes",
+  "vm",
+  "metric-events"
+];
+
+async function fetchInfraSchemas() {
+  const url = `${DT_URL}/api/v2/settings/schemas?fields=objectId,value`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { "Authorization": `Api-Token ${TOKEN}` }
+  });
+
+  const data = await response.json();
+
+  const infraSchemas = data.items
+    .map(s => s.schemaId)
+    .filter(id => id.startsWith("builtin:"))
+    .filter(id => INFRA_KEYWORDS.some(k => id.toLowerCase().includes(k)));
+
+  console.log("Infra monitoring schemas:", infraSchemas.length);
+  console.log(infraSchemas);
+}
+
+fetchInfraSchemas();
+
+
