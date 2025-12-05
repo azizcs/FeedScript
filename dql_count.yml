@@ -1,131 +1,299 @@
-name: "Loop-Based DQL Pagination"
-description: "Sequential pagination for large datasets"
-version: "1.0"
+metadata:
+  version: "1"
+  dependencies:
+    apps:
+      - id: dynatrace.automations
+        version: ^1.2367.6
+      - id: dynatrace.email
+        version: ^1.8.4
+  inputs: []
 
-trigger:
-  - manual: {}
+workflow:
+  title: Disk Capacity Prediction
+  description: "Predicts disk capacity exhaustion and sends alerts"
 
-tasks:
-  # 1. Initialization
-  - id: "init"
-    name: "Initialize"
-    type: "javascript"
-    script: |
-      const config = {
-        pageSize: 300,
-        maxPages: 50,
-        query: "fetch logs | filter timestamp > now()-1h | sort timestamp asc"
-      };
-      $state.set("pagination", {
-        config: config,
-        executionId: `run-${Date.now()}`,
-        currentPage: 0,
-        processedRecords: 0,
-        startTime: new Date().toISOString(),
-        pages: []
-      });
-      return { config: config };
+  tasks:
+    # Task 1: Query disk entities
+    query_entities_disk:
+      name: Query Disk Entities
+      description: Fetch disk information from Grail
+      action: dynatrace.automations:execute-dql-query
+      input:
+        query: !-
+          fetch dt.entity.disk
+          | filter isNotNull(disk.free)
+          | fields
+            id = entity.id,
+            name = entity.name,
+            total = disk.total,
+            free = disk.free,
+            used = disk.used,
+            host = belongs_to[dt.entity.host],
+            timestamp = timestamp
+          | fieldsAdd usedPercentage = (used / total) * 100
+          | sort usedPercentage desc
+        failOnEmptyResult: false
+      position:
+        x: 0
+        y: 1
+      predecessors: []
 
-  # 2. Get total count
-  - id: "get_count"
-    name: "Get Total Count"
-    type: "dql"
-    input:
-      query: "{{ init.config.query }} | summarize count = count()"
-    action: "com.dynatrace.dql.query"
+    # Task 2: Loop through entities and predict capacity
+    predict_disk_full_capacity:
+      name: Predict Disk Full Capacity
+      description: Run prediction analysis for each disk
+      action: dynatrace.automations:run-javascript
+      input:
+        script: !-
+          // JavaScript code for disk capacity prediction
+          const entities = $inputs.entities || [];
+          const results = [];
 
-  # 3. Calculate pages
-  - id: "calc_pages"
-    name: "Calculate Pages"
-    type: "javascript"
-    input:
-      countResult: "{{ get_count.result }}"
-      config: "{{ init.config }}"
-    script: |
-      const count = $inputs.countResult.records?.[0]?.count || 0;
-      const pages = Math.ceil(count / $inputs.config.pageSize);
-      const actualPages = Math.min(pages, $inputs.config.maxPages);
-      console.log(`Processing ${actualPages} pages for ${count} records`);
-      return {
-        totalRecords: count,
-        totalPages: actualPages,
-        pageSize: $inputs.config.pageSize
-      };
+          for (const entity of entities) {
+            try {
+              // Extract disk metrics
+              const diskName = entity.name || 'Unknown Disk';
+              const totalGB = (entity.total || 0) / (1024 * 1024 * 1024);
+              const usedGB = (entity.used || 0) / (1024 * 1024 * 1024);
+              const freeGB = (entity.free || 0) / (1024 * 1024 * 1024);
+              const usedPercentage = entity.usedPercentage || 0;
 
-  # 4. Main processing loop
-  - id: "process_loop"
-    name: "Process Pages"
-    type: "loop"
-    loop:
-      script: |
-        const pages = {{ calc_pages.totalPages }};
-        return Array.from({length: pages}, (_, i) => ({
-          pageNum: i + 1,
-          offset: i * {{ calc_pages.pageSize }}
-        }));
-      itemVariable: "page"
-    conditions:
-      - expression: "{{ calc_pages.totalPages }} > 0"
-    tasks:
-      # 4a. Fetch page
-      - id: "fetch_page"
-        name: "Fetch Page {{ page.pageNum }}"
-        type: "dql"
-        input:
-          query: |
-            {{ init.config.query }}
-            | limit {{ calc_pages.pageSize }}, {{ page.offset }}
-        action: "com.dynatrace.dql.query"
-        delay: 200
+              // Simple linear prediction (can be enhanced with ML)
+              // Assume current daily growth rate based on last 7 days average
+              const dailyGrowthGB = usedGB * 0.05; // 5% daily growth estimate
 
-      # 4b. Process page
-      - id: "process_page"
-        name: "Process Page {{ page.pageNum }}"
-        type: "javascript"
-        input:
-          data: "{{ fetch_page.result }}"
-          pageInfo: "{{ page }}"
-        script: |
-          const records = $inputs.data.records || [];
-          const state = $state.get("pagination");
+              // Calculate days until full
+              const daysUntilFull = freeGB / dailyGrowthGB;
 
-          // Update state
-          state.currentPage = $inputs.pageInfo.pageNum;
-          state.processedRecords += records.length;
-          state.pages.push({
-            page: $inputs.pageInfo.pageNum,
-            records: records.length,
-            timestamp: new Date().toISOString()
-          });
-          $state.set("pagination", state);
+              // Determine alert level
+              let alertLevel = 'INFO';
+              let prediction = '';
 
-          console.log(`Page ${$inputs.pageInfo.pageNum}: ${records.length} records`);
+              if (daysUntilFull <= 7) {
+                alertLevel = 'CRITICAL';
+                prediction = `Disk will be full in ${Math.round(daysUntilFull)} days!`;
+              } else if (daysUntilFull <= 30) {
+                alertLevel = 'WARNING';
+                prediction = `Disk will be full in ${Math.round(daysUntilFull)} days`;
+              } else {
+                alertLevel = 'OK';
+                prediction = `Adequate capacity for ${Math.round(daysUntilFull)} days`;
+              }
 
-          // Return small result
+              results.push({
+                diskId: entity.id,
+                diskName: diskName,
+                host: entity.host || 'Unknown',
+                totalGB: Math.round(totalGB * 100) / 100,
+                usedGB: Math.round(usedGB * 100) / 100,
+                freeGB: Math.round(freeGB * 100) / 100,
+                usedPercentage: Math.round(usedPercentage * 100) / 100,
+                dailyGrowthGB: Math.round(dailyGrowthGB * 100) / 100,
+                daysUntilFull: Math.round(daysUntilFull),
+                alertLevel: alertLevel,
+                prediction: prediction,
+                timestamp: new Date().toISOString()
+              });
+
+            } catch (error) {
+              console.error(`Error processing disk ${entity.id}:`, error);
+              results.push({
+                diskId: entity.id,
+                error: error.message,
+                alertLevel: 'ERROR'
+              });
+            }
+          }
+
+          // Filter only critical and warning disks for alerts
+          const alertDisks = results.filter(disk =>
+            disk.alertLevel === 'CRITICAL' || disk.alertLevel === 'WARNING'
+          );
+
           return {
-            page: $inputs.pageInfo.pageNum,
-            records: records.length,
-            sample: records[0] || null
+            allResults: results,
+            alertDisks: alertDisks,
+            totalDisks: results.length,
+            criticalCount: results.filter(d => d.alertLevel === 'CRITICAL').length,
+            warningCount: results.filter(d => d.alertLevel === 'WARNING').length
           };
+      position:
+        x: 0
+        y: 2
+      predecessors:
+        - query_entities_disk
+      retry:
+        count: 2
+        delay: 30
+      timeout: 3000
+      input:
+        entities: "{{ query_entities_disk.result.records }}"
+      conditions:
+        states:
+          query_entities_disk: SUCCESS
 
-  # 5. Final summary
-  - id: "summary"
-    name: "Generate Summary"
-    type: "javascript"
-    input:
-      state: "{{ $state.get('pagination') }}"
-      pages: "{{ calc_pages }}"
-    script: |
-      const state = $inputs.state;
-      const endTime = new Date();
-      const duration = (endTime - new Date(state.startTime)) / 1000;
+    # Task 3: Format email content
+    format_disk_email:
+      name: Format Disk Alert Email
+      description: Format email content with disk predictions
+      action: dynatrace.automations:run-javascript
+      input:
+        script: !-
+          const predictions = $inputs.predictions;
+          const alertDisks = predictions?.alertDisks || [];
 
-      return {
-        workflowId: state.executionId,
-        durationSeconds: duration,
-        totalPages: $inputs.pages.totalPages,
-        totalRecordsProcessed: state.processedRecords,
-        averageRecordsPerSecond: state.processedRecords / duration,
-        pages: state.pages,
-        status: "completed"
-      };
+          if (alertDisks.length === 0) {
+            return {
+              sendEmail: false,
+              subject: "Disk Capacity: All Disks OK",
+              body: "No disk capacity issues detected."
+            };
+          }
+
+          // Create HTML table for critical/warning disks
+          let tableRows = '';
+          alertDisks.forEach(disk => {
+            const rowColor = disk.alertLevel === 'CRITICAL' ? '#ffcccc' : '#fff3cd';
+            const textColor = disk.alertLevel === 'CRITICAL' ? '#721c24' : '#856404';
+
+            tableRows += `
+              <tr style="background-color: ${rowColor};">
+                <td style="padding: 8px; border: 1px solid #ddd; color: ${textColor};">
+                  <strong>${disk.diskName}</strong>
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; color: ${textColor};">
+                  ${disk.host}
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; color: ${textColor};">
+                  ${disk.usedPercentage}%
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; color: ${textColor};">
+                  ${disk.freeGB} GB free
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; color: ${textColor};">
+                  ${disk.daysUntilFull} days
+                </td>
+                <td style="padding: 8px; border: 1px solid #ddd; color: ${textColor};">
+                  <strong>${disk.prediction}</strong>
+                </td>
+              </tr>
+            `;
+          });
+
+          const emailHtml = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <style>
+                body { font-family: Arial, sans-serif; }
+                table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+                th { background-color: #4CAF50; color: white; padding: 12px; text-align: left; }
+                .summary { background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; }
+                .critical { color: #dc3545; font-weight: bold; }
+                .warning { color: #ffc107; font-weight: bold; }
+              </style>
+            </head>
+            <body>
+              <h2>🚨 Disk Capacity Alert Report</h2>
+
+              <div class="summary">
+                <p><strong>Scan Summary:</strong></p>
+                <ul>
+                  <li>Total disks analyzed: ${predictions.totalDisks || 0}</li>
+                  <li class="critical">Critical disks: ${predictions.criticalCount || 0}</li>
+                  <li class="warning">Warning disks: ${predictions.warningCount || 0}</li>
+                  <li>Scan time: ${new Date().toLocaleString()}</li>
+                </ul>
+              </div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>Disk Name</th>
+                    <th>Host</th>
+                    <th>Usage</th>
+                    <th>Free Space</th>
+                    <th>Days Until Full</th>
+                    <th>Prediction</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${tableRows}
+                </tbody>
+              </table>
+
+              <p><strong>Recommendations:</strong></p>
+              <ul>
+                <li>Review and clean up unnecessary files</li>
+                <li>Consider increasing disk capacity for critical systems</li>
+                <li>Implement automated cleanup scripts</li>
+                <li>Monitor growth rates daily</li>
+              </ul>
+
+              <p>This is an automated alert from Dynatrace Disk Capacity Prediction workflow.</p>
+            </body>
+            </html>
+          `;
+
+          const criticalCount = predictions.criticalCount || 0;
+          const warningCount = predictions.warningCount || 0;
+
+          let subject = "Disk Capacity Status: ";
+          if (criticalCount > 0) {
+            subject += `🚨 CRITICAL - ${criticalCount} disk(s) near capacity`;
+          } else if (warningCount > 0) {
+            subject += `⚠️ WARNING - ${warningCount} disk(s) need attention`;
+          } else {
+            subject += "✅ All disks OK";
+          }
+
+          return {
+            sendEmail: alertDisks.length > 0,
+            subject: subject,
+            body: emailHtml,
+            alertCount: alertDisks.length,
+            hasCritical: criticalCount > 0
+          };
+      position:
+        x: 0
+        y: 3
+      predecessors:
+        - predict_disk_full_capacity
+      input:
+        predictions: "{{ predict_disk_full_capacity.result }}"
+      conditions:
+        states:
+          predict_disk_full_capacity: OK
+
+    # Task 4: Send email alert
+    send_disk_alert_email:
+      name: Send Disk Alert Email
+      description: Send email notification
+      action: dynatrace.email:send-email
+      active: true
+      input:
+        to:
+          - abdoulaziz.clise@fd.com
+        cc: []
+        bcc: []
+        subject: "{{ format_disk_email.result.subject }}"
+        content:
+          - html: "{{ format_disk_email.result.body }}"
+      position:
+        x: 0
+        y: 4
+      predecessors:
+        - format_disk_email
+      conditions:
+        states:
+          format_disk_email: OK
+        expression: "{{ format_disk_email.result.sendEmail }} == true"
+
+  trigger:
+    schedule:
+      cron: "0 8 * * *"  # Daily at 8 AM
+      timezone: "UTC"
+
+  schemaVersion: 3
+  hourlyExecutionLimit: 1000
+  type: STANDARD
