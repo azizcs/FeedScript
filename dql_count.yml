@@ -1,0 +1,131 @@
+name: "Loop-Based DQL Pagination"
+description: "Sequential pagination for large datasets"
+version: "1.0"
+
+trigger:
+  - manual: {}
+
+tasks:
+  # 1. Initialization
+  - id: "init"
+    name: "Initialize"
+    type: "javascript"
+    script: |
+      const config = {
+        pageSize: 300,
+        maxPages: 50,
+        query: "fetch logs | filter timestamp > now()-1h | sort timestamp asc"
+      };
+      $state.set("pagination", {
+        config: config,
+        executionId: `run-${Date.now()}`,
+        currentPage: 0,
+        processedRecords: 0,
+        startTime: new Date().toISOString(),
+        pages: []
+      });
+      return { config: config };
+
+  # 2. Get total count
+  - id: "get_count"
+    name: "Get Total Count"
+    type: "dql"
+    input:
+      query: "{{ init.config.query }} | summarize count = count()"
+    action: "com.dynatrace.dql.query"
+
+  # 3. Calculate pages
+  - id: "calc_pages"
+    name: "Calculate Pages"
+    type: "javascript"
+    input:
+      countResult: "{{ get_count.result }}"
+      config: "{{ init.config }}"
+    script: |
+      const count = $inputs.countResult.records?.[0]?.count || 0;
+      const pages = Math.ceil(count / $inputs.config.pageSize);
+      const actualPages = Math.min(pages, $inputs.config.maxPages);
+      console.log(`Processing ${actualPages} pages for ${count} records`);
+      return {
+        totalRecords: count,
+        totalPages: actualPages,
+        pageSize: $inputs.config.pageSize
+      };
+
+  # 4. Main processing loop
+  - id: "process_loop"
+    name: "Process Pages"
+    type: "loop"
+    loop:
+      script: |
+        const pages = {{ calc_pages.totalPages }};
+        return Array.from({length: pages}, (_, i) => ({
+          pageNum: i + 1,
+          offset: i * {{ calc_pages.pageSize }}
+        }));
+      itemVariable: "page"
+    conditions:
+      - expression: "{{ calc_pages.totalPages }} > 0"
+    tasks:
+      # 4a. Fetch page
+      - id: "fetch_page"
+        name: "Fetch Page {{ page.pageNum }}"
+        type: "dql"
+        input:
+          query: |
+            {{ init.config.query }}
+            | limit {{ calc_pages.pageSize }}, {{ page.offset }}
+        action: "com.dynatrace.dql.query"
+        delay: 200
+
+      # 4b. Process page
+      - id: "process_page"
+        name: "Process Page {{ page.pageNum }}"
+        type: "javascript"
+        input:
+          data: "{{ fetch_page.result }}"
+          pageInfo: "{{ page }}"
+        script: |
+          const records = $inputs.data.records || [];
+          const state = $state.get("pagination");
+
+          // Update state
+          state.currentPage = $inputs.pageInfo.pageNum;
+          state.processedRecords += records.length;
+          state.pages.push({
+            page: $inputs.pageInfo.pageNum,
+            records: records.length,
+            timestamp: new Date().toISOString()
+          });
+          $state.set("pagination", state);
+
+          console.log(`Page ${$inputs.pageInfo.pageNum}: ${records.length} records`);
+
+          // Return small result
+          return {
+            page: $inputs.pageInfo.pageNum,
+            records: records.length,
+            sample: records[0] || null
+          };
+
+  # 5. Final summary
+  - id: "summary"
+    name: "Generate Summary"
+    type: "javascript"
+    input:
+      state: "{{ $state.get('pagination') }}"
+      pages: "{{ calc_pages }}"
+    script: |
+      const state = $inputs.state;
+      const endTime = new Date();
+      const duration = (endTime - new Date(state.startTime)) / 1000;
+
+      return {
+        workflowId: state.executionId,
+        durationSeconds: duration,
+        totalPages: $inputs.pages.totalPages,
+        totalRecordsProcessed: state.processedRecords,
+        averageRecordsPerSecond: state.processedRecords / duration,
+        pages: state.pages,
+        status: "completed"
+      };
